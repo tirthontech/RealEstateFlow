@@ -15,6 +15,9 @@ import AgentDetailPage from "@/pages/agent-detail";
 import AnalyticsPage from "@/pages/analytics";
 import WhatsAppPage from "@/pages/whatsapp";
 import IntegrationsPage from "@/pages/integrations";
+import SettingsPage from "@/pages/settings";
+import CommissionPage from "@/pages/commission";
+import ViewingsPage from "@/pages/viewings";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
@@ -35,9 +38,12 @@ function Router() {
         <Route path="/deals" component={DealsPage} />
         <Route path="/agents" component={AgentsPage} />
         <Route path="/agents/:id" component={AgentDetailPage} />
+        <Route path="/viewings" component={ViewingsPage} />
         <Route path="/analytics" component={AnalyticsPage} />
         <Route path="/whatsapp" component={WhatsAppPage} />
         <Route path="/integrations" component={IntegrationsPage} />
+        <Route path="/commission" component={CommissionPage} />
+        <Route path="/settings" component={SettingsPage} />
         <Route component={NotFound} />
       </Switch>
     </MainLayout>
