@@ -12,6 +12,9 @@ import PropertyDetailPage from "@/pages/property-detail";
 import DealsPage from "@/pages/deals";
 import AgentsPage from "@/pages/agents";
 import AgentDetailPage from "@/pages/agent-detail";
+import AnalyticsPage from "@/pages/analytics";
+import WhatsAppPage from "@/pages/whatsapp";
+import IntegrationsPage from "@/pages/integrations";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
@@ -32,6 +35,9 @@ function Router() {
         <Route path="/deals" component={DealsPage} />
         <Route path="/agents" component={AgentsPage} />
         <Route path="/agents/:id" component={AgentDetailPage} />
+        <Route path="/analytics" component={AnalyticsPage} />
+        <Route path="/whatsapp" component={WhatsAppPage} />
+        <Route path="/integrations" component={IntegrationsPage} />
         <Route component={NotFound} />
       </Switch>
     </MainLayout>

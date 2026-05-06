@@ -6,9 +6,10 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatCurrency(value: number): string {
-  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
-  if (value >= 1_000) return `$${(value / 1_000).toFixed(0)}k`;
-  return `$${value.toFixed(0)}`;
+  if (value >= 10_000_000) return `₹${(value / 10_000_000).toFixed(1)}Cr`;
+  if (value >= 100_000) return `₹${(value / 100_000).toFixed(1)}L`;
+  if (value >= 1_000) return `₹${(value / 1_000).toFixed(0)}k`;
+  return `₹${value.toFixed(0)}`;
 }
 
 export function formatDate(dateStr: string): string {
@@ -27,7 +28,7 @@ export function timeAgo(dateStr: string): string {
 
 export const LEAD_STATUSES = ["new", "contacted", "qualified", "proposal", "negotiation", "closed_won", "closed_lost"] as const;
 export const DEAL_STAGES = ["prospect", "viewing", "offer", "under_contract", "due_diligence", "closed_won", "closed_lost"] as const;
-export const LEAD_SOURCES = ["zillow", "realtor", "referral", "website", "phone", "email", "other"] as const;
+export const LEAD_SOURCES = ["99acres", "magicbricks", "housing", "facebook", "google", "whatsapp", "referral", "walk_in", "website", "phone", "email", "other"] as const;
 export const PROPERTY_TYPES = ["residential", "commercial", "land", "rental"] as const;
 export const PROPERTY_STATUSES = ["available", "under_offer", "sold", "withdrawn"] as const;
 export const MARKETS = ["US", "UK", "AU", "NZ", "EU"] as const;
