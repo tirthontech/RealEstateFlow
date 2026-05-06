@@ -3,20 +3,30 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: EstateFlow CRM API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: leads
+    description: Lead management
+  - name: properties
+    description: Property listings
+  - name: deals
+    description: Deal pipeline
+  - name: agents
+    description: Agent management
+  - name: dashboard
+    description: Dashboard analytics
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +34,439 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /leads:
+    get:
+      operationId: getLeads
+      tags: [leads]
+      summary: List all leads
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: assignedTo
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of leads
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Lead"
+    post:
+      operationId: createLead
+      tags: [leads]
+      summary: Create a lead
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLeadBody"
+      responses:
+        "201":
+          description: Created lead
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lead"
+
+  /leads/{id}:
+    get:
+      operationId: getLead
+      tags: [leads]
+      summary: Get a lead by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Lead detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lead"
+        "404":
+          description: Not found
+    put:
+      operationId: updateLead
+      tags: [leads]
+      summary: Update a lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateLeadBody"
+      responses:
+        "200":
+          description: Updated lead
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lead"
+    delete:
+      operationId: deleteLead
+      tags: [leads]
+      summary: Delete a lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /properties:
+    get:
+      operationId: getProperties
+      tags: [properties]
+      summary: List all properties
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: type
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of properties
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Property"
+    post:
+      operationId: createProperty
+      tags: [properties]
+      summary: Create a property
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePropertyBody"
+      responses:
+        "201":
+          description: Created property
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Property"
+
+  /properties/{id}:
+    get:
+      operationId: getProperty
+      tags: [properties]
+      summary: Get a property by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Property detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Property"
+        "404":
+          description: Not found
+    put:
+      operationId: updateProperty
+      tags: [properties]
+      summary: Update a property
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePropertyBody"
+      responses:
+        "200":
+          description: Updated property
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Property"
+    delete:
+      operationId: deleteProperty
+      tags: [properties]
+      summary: Delete a property
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /deals:
+    get:
+      operationId: getDeals
+      tags: [deals]
+      summary: List all deals
+      parameters:
+        - name: stage
+          in: query
+          schema:
+            type: string
+        - name: agentId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of deals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Deal"
+    post:
+      operationId: createDeal
+      tags: [deals]
+      summary: Create a deal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDealBody"
+      responses:
+        "201":
+          description: Created deal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Deal"
+
+  /deals/{id}:
+    get:
+      operationId: getDeal
+      tags: [deals]
+      summary: Get a deal by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deal detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Deal"
+        "404":
+          description: Not found
+    put:
+      operationId: updateDeal
+      tags: [deals]
+      summary: Update a deal
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDealBody"
+      responses:
+        "200":
+          description: Updated deal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Deal"
+    delete:
+      operationId: deleteDeal
+      tags: [deals]
+      summary: Delete a deal
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /agents:
+    get:
+      operationId: getAgents
+      tags: [agents]
+      summary: List all agents
+      responses:
+        "200":
+          description: List of agents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Agent"
+    post:
+      operationId: createAgent
+      tags: [agents]
+      summary: Create an agent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAgentBody"
+      responses:
+        "201":
+          description: Created agent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agent"
+
+  /agents/{id}:
+    get:
+      operationId: getAgent
+      tags: [agents]
+      summary: Get an agent by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Agent detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agent"
+        "404":
+          description: Not found
+    put:
+      operationId: updateAgent
+      tags: [agents]
+      summary: Update an agent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAgentBody"
+      responses:
+        "200":
+          description: Updated agent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agent"
+
+  /dashboard/stats:
+    get:
+      operationId: getDashboardStats
+      tags: [dashboard]
+      summary: Dashboard summary statistics
+      responses:
+        "200":
+          description: Dashboard stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+
+  /dashboard/pipeline:
+    get:
+      operationId: getDashboardPipeline
+      tags: [dashboard]
+      summary: Deal pipeline by stage
+      responses:
+        "200":
+          description: Pipeline breakdown
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PipelineStage"
+
+  /dashboard/recent-activity:
+    get:
+      operationId: getRecentActivity
+      tags: [dashboard]
+      summary: Recent CRM activity feed
+      responses:
+        "200":
+          description: Recent activity items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityItem"
+
+  /dashboard/lead-sources:
+    get:
+      operationId: getLeadSources
+      tags: [dashboard]
+      summary: Lead counts grouped by source
+      responses:
+        "200":
+          description: Lead source breakdown
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LeadSource"
+
 components:
   schemas:
     HealthStatus:
@@ -31,6 +474,432 @@ components:
       properties:
         status:
           type: string
-      required:
-        - status
+      required: [status]
 
+    Lead:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+          nullable: true
+        source:
+          type: string
+          description: "zillow, realtor, referral, website, phone, email, other"
+        status:
+          type: string
+          description: "new, contacted, qualified, proposal, negotiation, closed_won, closed_lost"
+        score:
+          type: integer
+          description: 0-100 lead score
+        budget:
+          type: number
+          nullable: true
+        propertyType:
+          type: string
+          nullable: true
+          description: "residential, commercial, land, rental"
+        notes:
+          type: string
+          nullable: true
+        assignedTo:
+          type: integer
+          nullable: true
+          description: Agent ID
+        agentName:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required: [id, name, email, source, status, score, createdAt, updatedAt]
+
+    CreateLeadBody:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+          nullable: true
+        source:
+          type: string
+        status:
+          type: string
+        score:
+          type: integer
+        budget:
+          type: number
+          nullable: true
+        propertyType:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        assignedTo:
+          type: integer
+          nullable: true
+      required: [name, email, source]
+
+    UpdateLeadBody:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+          nullable: true
+        source:
+          type: string
+        status:
+          type: string
+        score:
+          type: integer
+        budget:
+          type: number
+          nullable: true
+        propertyType:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        assignedTo:
+          type: integer
+          nullable: true
+
+    Property:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+        price:
+          type: number
+        type:
+          type: string
+          description: "residential, commercial, land, rental"
+        status:
+          type: string
+          description: "available, under_offer, sold, withdrawn"
+        bedrooms:
+          type: integer
+          nullable: true
+        bathrooms:
+          type: integer
+          nullable: true
+        areaSqft:
+          type: number
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        agentId:
+          type: integer
+          nullable: true
+        agentName:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required: [id, title, address, city, price, type, status, createdAt, updatedAt]
+
+    CreatePropertyBody:
+      type: object
+      properties:
+        title:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+        price:
+          type: number
+        type:
+          type: string
+        status:
+          type: string
+        bedrooms:
+          type: integer
+          nullable: true
+        bathrooms:
+          type: integer
+          nullable: true
+        areaSqft:
+          type: number
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        agentId:
+          type: integer
+          nullable: true
+      required: [title, address, city, price, type]
+
+    UpdatePropertyBody:
+      type: object
+      properties:
+        title:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+        price:
+          type: number
+        type:
+          type: string
+        status:
+          type: string
+        bedrooms:
+          type: integer
+          nullable: true
+        bathrooms:
+          type: integer
+          nullable: true
+        areaSqft:
+          type: number
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        agentId:
+          type: integer
+          nullable: true
+
+    Deal:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        leadId:
+          type: integer
+          nullable: true
+        leadName:
+          type: string
+          nullable: true
+        propertyId:
+          type: integer
+          nullable: true
+        propertyTitle:
+          type: string
+          nullable: true
+        agentId:
+          type: integer
+          nullable: true
+        agentName:
+          type: string
+          nullable: true
+        stage:
+          type: string
+          description: "prospect, viewing, offer, under_contract, due_diligence, closed_won, closed_lost"
+        value:
+          type: number
+        closingDate:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required: [id, title, stage, value, createdAt, updatedAt]
+
+    CreateDealBody:
+      type: object
+      properties:
+        title:
+          type: string
+        leadId:
+          type: integer
+          nullable: true
+        propertyId:
+          type: integer
+          nullable: true
+        agentId:
+          type: integer
+          nullable: true
+        stage:
+          type: string
+        value:
+          type: number
+        closingDate:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+      required: [title, value]
+
+    UpdateDealBody:
+      type: object
+      properties:
+        title:
+          type: string
+        leadId:
+          type: integer
+          nullable: true
+        propertyId:
+          type: integer
+          nullable: true
+        agentId:
+          type: integer
+          nullable: true
+        stage:
+          type: string
+        value:
+          type: number
+        closingDate:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+
+    Agent:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+          nullable: true
+        role:
+          type: string
+          description: "admin, manager, agent, support"
+        market:
+          type: string
+          nullable: true
+          description: "US, UK, AU, NZ, EU"
+        activeLeads:
+          type: integer
+        dealsCount:
+          type: integer
+        revenue:
+          type: number
+        createdAt:
+          type: string
+      required: [id, name, email, role, activeLeads, dealsCount, revenue, createdAt]
+
+    CreateAgentBody:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+          nullable: true
+        role:
+          type: string
+        market:
+          type: string
+          nullable: true
+      required: [name, email]
+
+    UpdateAgentBody:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+          nullable: true
+        role:
+          type: string
+        market:
+          type: string
+          nullable: true
+
+    DashboardStats:
+      type: object
+      properties:
+        totalLeads:
+          type: integer
+        newLeadsThisMonth:
+          type: integer
+        totalDeals:
+          type: integer
+        activeDeals:
+          type: integer
+        pipelineValue:
+          type: number
+        closedRevenue:
+          type: number
+        totalProperties:
+          type: integer
+        availableProperties:
+          type: integer
+        conversionRate:
+          type: number
+        avgDealValue:
+          type: number
+      required: [totalLeads, newLeadsThisMonth, totalDeals, activeDeals, pipelineValue, closedRevenue, totalProperties, availableProperties, conversionRate, avgDealValue]
+
+    PipelineStage:
+      type: object
+      properties:
+        stage:
+          type: string
+        count:
+          type: integer
+        value:
+          type: number
+      required: [stage, count, value]
+
+    ActivityItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+          description: "lead_created, deal_updated, property_added, deal_closed"
+        description:
+          type: string
+        entityName:
+          type: string
+        agentName:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+      required: [id, type, description, entityName, createdAt]
+
+    LeadSource:
+      type: object
+      properties:
+        source:
+          type: string
+        count:
+          type: integer
+      required: [source, count]

@@ -1,0 +1,253 @@
+<role>
+You are a world-class SaaS product architect, CRE (commercial/residential real estate) 
+domain expert, and full-stack engineering lead. You think in first principles, spot 
+gaps incumbents miss, and build systems that are compliant, scalable, and delightful.
+</role>
+
+<task>
+Design a complete, production-ready SaaS CRM platform for real estate brokers and agents 
+targeting English-speaking Western markets: United States, United Kingdom, Australia, 
+New Zealand, and Europe (primarily Germany, France, Spain, Netherlands).
+
+This is a direct competitor to Brokerwise (India) but rebuilt for Western markets with 
+superior features, compliance, UX, and AI capabilities.
+
+Think deeply and exhaustively before writing. Use extended reasoning to:
+1. Identify every gap in Brokerwise that Western brokers would feel
+2. Map regulatory and compliance requirements per market
+3. Design a feature set that is genuinely best-in-class globally
+4. Architect the full tech stack with scalability in mind
+5. Define the go-to-market, pricing, and positioning strategy
+</task>
+
+---
+
+<market_context>
+BROKERWISE (what we're improving on):
+- India-specific: 99acres, MagicBricks, Housing.com integrations only
+- WhatsApp-first communication
+- Basic team GPS tracking
+- ₹12,000/year (~$145 USD) pricing
+- White-label mobile apps
+- Basic analytics
+
+WESTERN MARKETS WE'RE ENTERING:
+- US: MLS integrations, Zillow/Realtor.com/Redfin, DocuSign, strict RESPA/Fair Housing compliance, CAN-SPAM, CCPA (California), NAR membership workflows
+- UK: Rightmove, OnTheMarket, Zoopla, AML/KYC requirements, GDPR, Anti-Money Laundering 2017 Act, EPC ratings, chain management
+- Australia: REA Group (realestate.com.au), Domain, PEXA (e-conveyancing), state-by-state licensing, Privacy Act 1988
+- New Zealand: realestate.co.nz, REINZ compliance, Property Law Act, AML/CFT Act
+- Europe: Immoscout24 (DE), SeLoger (FR), Idealista (ES), Funda (NL), GDPR (very strict), energy performance certificates (EPCs), language localisation
+</market_context>
+
+---
+
+<thinking_instructions>
+Work through ALL of the following sections with maximum depth. Do not summarise — 
+expand fully. For each section, think about: what would a senior VC-backed product 
+team build here? What would a lone expert broker need? What does the competition 
+NOT have?
+
+Reason through tradeoffs, edge cases, and implementation complexity honestly.
+Flag things that are "MVP must-have" vs "Phase 2" vs "Phase 3 / enterprise".
+</thinking_instructions>
+
+---
+
+<deliverables>
+
+## SECTION 1 — Product Vision & Positioning
+- Core value proposition (one sentence per market)
+- Positioning vs. incumbents: Salesforce RE, Follow Up Boss, LionDesk, Rex CRM (AU), Reapit (UK), Propstack (EU)
+- The "10x better" thesis — where specifically is this product 10x better?
+- Brand name ideas and rationale
+- Pricing tiers (Starter / Growth / Team / Enterprise) with feature gating
+- White-label and reseller program design
+
+## SECTION 2 — Lead Management Engine
+- Omnichannel lead capture: list every portal and ad platform per market with their lead push API details
+- Smart lead routing: round-robin, geographic, skill-based, language-based, capacity-based
+- Lead deduplication: exact match + fuzzy matching on phone/email/name
+- Lead scoring model: define all signals (response time, property match, budget fit, engagement score, source quality)
+- Lead timeline: every touchpoint logged with call recordings, email threads, WhatsApp messages, notes, documents in one chronological feed
+- Dormant lead re-engagement: rules engine to auto-trigger re-engagement campaigns after inactivity
+
+## SECTION 3 — AI & Automation Features
+- AI lead scoring with LLM reasoning ("This lead is high-priority because...")
+- Smart follow-up sequences: adaptive cadences based on lead behaviour
+- Auto-draft property match emails: personalised per lead preference, pulls listing data
+- AI conversation summaries: after every call/meeting, auto-generate structured notes
+- AI-powered property valuation estimates integrated into the CRM
+- Predictive pipeline: forecast deal close probability based on stage, days in stage, engagement
+- AI chatbot for the client portal (answers FAQs, books viewings, sends listings)
+- Natural language search: "Show me all leads who viewed 3+ properties and haven't responded in 7 days"
+- AI-powered content generator: listing descriptions, social posts, email campaigns
+- Voice-to-CRM: agents record voice notes, AI transcribes and structures into CRM fields
+
+## SECTION 4 — Communication Suite
+- Unified inbox: email (Gmail/Outlook OAuth), SMS, WhatsApp Business API, calls (VoIP via Twilio), all in one thread per contact
+- Two-way email sync with full thread history
+- SMS / MMS campaigns with per-country compliance (TCPA in US, PECR in UK, Spam Act in AU)
+- WhatsApp Business API: bulk broadcasts, templates, chatbot handoff, opt-in management
+- VoIP calling built-in: click-to-call, call recording (with consent banners per jurisdiction), voicemail drop
+- Video meeting booking: Calendly-like scheduler embedded in CRM, auto-syncs to Google/Outlook calendar
+- Automated follow-up bot: configurable sequences (Day 1 SMS → Day 3 email → Day 7 call reminder → Day 14 re-engagement)
+- Communication templates with merge fields, per-language versions
+- Broadcast campaigns with unsubscribe management and compliance footers
+
+## SECTION 5 — Property & Listing Management
+- Full listing inventory: photos, floorplans, virtual tour embeds (Matterport), pricing history, status
+- Listing syndication: one-click publish to Zillow, Rightmove, Domain, REA, Immoscout, etc.
+- Property matching engine: auto-match new listings to leads based on saved search criteria
+- CMA (Comparative Market Analysis) tool: auto-pulls comparable sales, generates branded PDF report
+- Open home / viewing scheduler: public booking page, auto-confirmations, SMS reminders, attendance tracking
+- Offer management: track all offers per property, counter-offer workflow, status board
+- Document vault per property: contracts, EPC, title deeds, inspection reports — all linked
+
+## SECTION 6 — Transaction & Deal Management
+- Deal pipeline: fully customisable stages per transaction type (sale, lease, commercial, off-plan)
+- Transaction checklist: per-country templates (US: earnest money → title search → appraisal → closing; UK: offer → solicitor → survey → exchange → completion)
+- Milestone tracking with automated notifications to all parties (buyer, seller, solicitor, agent)
+- Commission calculator: split commissions, referral fees, franchise fees — auto-calculated on deal close
+- DocuSign / Adobe Sign integration: send contracts directly from CRM, track signature status
+- Conveyancing integration (AU: PEXA, UK: InfoTrack)
+- Deposit and trust accounting tracker (non-transactional but shows balance status)
+
+## SECTION 7 — Compliance & Regulatory Engine
+US:
+- Fair Housing Act compliance checks on listing descriptions and communications
+- RESPA fee disclosure tracking
+- CCPA data subject request workflow (right to delete, right to access)
+- CAN-SPAM compliance for email campaigns
+- NAR Code of Ethics checklists
+- License expiry reminders per state
+
+UK:
+- AML/KYC: automated ID verification via Onfido/Yoti, PEP screening, sanctions check
+- GDPR consent management: granular per-channel consent, audit trail, data retention policies
+- Material information compliance (Part A/B/C): flag missing info on listings
+- Propertymark / NAEA membership workflow
+- EPC rating display requirement checks
+
+Australia:
+- Privacy Act 1988 compliance: consent tracking, data breach response workflow
+- State-by-state agency agreement templates (VIC, NSW, QLD, WA, SA)
+- REIQ / REI membership compliance checklist
+- Cooling-off period tracker
+
+New Zealand:
+- REINZ compliance checklist
+- AML/CFT due diligence workflow
+- REA (Real Estate Agents Authority) license tracking
+
+Europe (GDPR-wide):
+- Cookie consent and data processing agreement management
+- Right to erasure workflow
+- Data Processing Impact Assessment (DPIA) templates
+- Language localisation: EN/DE/FR/ES/NL
+- Country-specific mandatory disclosure rules
+
+## SECTION 8 — Team & Agency Management
+- Role-based access: Super Admin / Branch Manager / Senior Agent / Junior Agent / Support Staff / Client (read-only)
+- Agent performance dashboard: calls made, emails sent, viewings booked, deals in pipeline, revenue generated
+- Target setting: monthly/quarterly KPIs per agent, visual progress trackers
+- Commission ledger: real-time running totals per agent
+- Activity feed: every action logged per agent for manager review
+- Territory management: geographic lead assignment zones on a map
+- Franchise/multi-branch support: head office view across all branches with drill-down
+- Onboarding flow: built-in training checklist for new agents
+- Internal messaging / task assignment
+
+## SECTION 9 — Client-Facing Portal
+- Branded client login: buyer/tenant portal with saved search, property shortlist, viewing history
+- Document sharing: agents upload, clients sign or download
+- Offer tracker: client sees real-time status of their offer
+- Viewing booking: client self-books viewings from available slots
+- Mortgage calculator and broker referral (commission-sharing)
+- AI property recommendation feed based on client behaviour
+- Feedback after viewings: auto-sent form, responses feed back into lead scoring
+
+## SECTION 10 — Analytics & Reporting
+- Executive dashboard: revenue, pipeline value, conversion rates, average deal time
+- Lead source ROI: cost per lead by channel, conversion rate, revenue generated
+- Agent leaderboard: live, weekly, monthly rankings
+- Funnel analytics: drop-off rates at each pipeline stage
+- Forecast report: AI-predicted closings for next 30/60/90 days
+- Marketing attribution: multi-touch attribution for paid and organic
+- Compliance report: AML checks completed, GDPR consents obtained, license statuses
+- Custom report builder: drag-and-drop, exportable to PDF/CSV/Excel
+- Scheduled email reports: auto-send weekly digest to management
+
+## SECTION 11 — Mobile App
+- Full iOS + Android native apps
+- Offline mode: view and update leads without internet connection
+- GPS check-in: agents check in at property viewings
+- Push notifications: new lead alerts, follow-up reminders, deal milestones
+- Business card scanner: photo of card → AI extracts contact details → creates lead
+- Voice note → CRM: speak a note, AI transcribes and files it
+- Property camera: take photos on phone, auto-upload to property listing
+- WhatsApp-style chat with clients inside the app (routed through CRM)
+
+## SECTION 12 — Integrations
+PORTALS: Zillow (US), Realtor.com (US), Redfin (US), Rightmove (UK), OnTheMarket (UK), Zoopla (UK), realestate.com.au, Domain.com.au (AU), realestate.co.nz (NZ), Immoscout24 (DE), SeLoger (FR), Idealista (ES/PT), Funda (NL), Trovit (EU)
+EMAIL/CALENDAR: Gmail OAuth, Outlook/Exchange OAuth, Google Calendar, Apple Calendar
+COMMUNICATION: Twilio (SMS/VoIP), WhatsApp Business API (Meta), Vonage, MessageBird
+DOCUMENT/ESIGN: DocuSign, Adobe Sign, HelloSign, PandaDoc
+PAYMENTS: Stripe (deposits, subscription billing), GoCardless (UK/EU direct debit)
+ACCOUNTING: Xero, QuickBooks, MYOB (AU/NZ)
+IDENTITY/COMPLIANCE: Onfido (KYC), Yoti, Stripe Identity, Dow Jones Risk & Compliance (PEP/sanctions)
+MARKETING: Mailchimp, HubSpot, ActiveCampaign (sync contacts)
+CRM MIGRATION: Salesforce, Zoho, Follow Up Boss, Rex CRM import tools
+CONVEYANCING: PEXA (AU), InfoTrack (AU/NZ), SearchFlow (UK)
+AUTOMATION: Zapier, Make (Integromat), native REST API with webhooks
+
+## SECTION 13 — Technical Architecture
+Design the full system architecture covering:
+- Frontend: Next.js 14+ (App Router), React Server Components, TypeScript, Tailwind CSS, shadcn/ui, Zustand, React Query
+- Backend: Node.js with NestJS (modular, DI), GraphQL + REST hybrid API, BullMQ for job queues
+- Database: PostgreSQL (primary, multi-tenant with row-level security), Redis (caching, sessions, queues), Elasticsearch (full-text search on leads/properties/docs)
+- Multi-tenancy: schema-per-tenant vs row-level security — argue the tradeoff and choose with justification
+- AI/ML: OpenAI GPT-4o (lead scoring reasoning, content generation, summaries), Whisper (voice transcription), LangChain for agents/tools, vector embeddings in pgvector for property matching
+- File storage: S3-compatible (AWS S3 or Cloudflare R2), direct upload from client, signed URLs
+- Email delivery: AWS SES + custom sending domain per white-label tenant
+- Infrastructure: AWS (primary), multi-region (us-east-1, eu-west-1, ap-southeast-2 for AU/NZ), ECS Fargate (containerised), RDS Aurora PostgreSQL, ElastiCache Redis, CloudFront CDN
+- Security: SOC 2 Type II path, GDPR DPA, pen testing cadence, encryption at rest (AES-256) and in transit (TLS 1.3), secrets in AWS Secrets Manager, MFA enforced
+- Observability: Datadog (APM + logs + infrastructure), Sentry (error tracking), Uptime monitoring
+- CI/CD: GitHub Actions → Docker build → ECR → ECS rolling deploy; branch preview environments on Vercel for frontend
+- Rate limiting: per-tenant API quotas, abuse detection
+- Data residency: EU tenants on eu-west-1, AU/NZ tenants on ap-southeast-2 (GDPR and Australian Privacy Act data localisation)
+
+## SECTION 14 — Go-to-Market Strategy
+- ICP (ideal customer profile) per market with firmographics
+- Pricing strategy: monthly vs annual, per-seat vs per-agency pricing model comparison — choose with justification
+- Freemium or free trial design (14 days, no card required)
+- Channel strategy: direct sales, inbound SEO content (targeting US/UK/AU broker search terms), partnerships with real estate associations (NAR, Propertymark, REIQ), portal integrations as distribution
+- Onboarding: white-glove migration from spreadsheet or competitor CRM, dedicated CSM for first 90 days
+- Expansion revenue: upsells (AI add-on, compliance module, multi-branch), referral program
+- Competitive displacement plays against Follow Up Boss, LionDesk, Rex, Reapit
+- Launch sequence: beta in one market first (recommend which and why), then expand
+
+## SECTION 15 — MVP Scope (90-day build)
+Define the strict MVP feature set that:
+- Can be built by a team of 4-6 engineers in 90 days
+- Is sufficient to charge money and get the first 10 paying customers
+- Is differentiated enough to win against spreadsheets and generic CRMs
+- Prioritise ruthlessly: what is IN the MVP and what is explicitly deferred
+- Define the tech shortcuts acceptable in MVP (e.g. use third-party services instead of building)
+- Suggest the right founding team composition
+
+</deliverables>
+
+---
+
+<output_format>
+For each section:
+1. Lead with a one-paragraph strategic summary (the "why this matters" framing)
+2. Then go deep on the specifics — bullet points, sub-sections, technical specs, tradeoffs
+3. Flag items as: [MVP] [Phase 2] [Phase 3 / Enterprise]
+4. Where there is a design decision (e.g. multi-tenancy model, pricing structure), 
+   argue both sides and state your recommendation clearly
+5. At the end, produce a single consolidated feature matrix table showing all features 
+   across all 5 markets, marking availability per market at launch vs. roadmap
+</output_format>
+
+Think for as long as needed before writing. This is a $10M ARR product design exercise.
