@@ -2,57 +2,107 @@ import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, Users, Building2, GitBranch, UserCheck,
   Menu, BarChart3, MessageCircle, Plug2, Settings, Calculator,
-  Calendar, Bell, X, Search, ChevronRight,
+  Calendar, Bell, X, Search, ChevronRight, ShieldCheck, ChevronDown,
+  CheckSquare,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
-import { useGetRecentActivity, useGetLeads, getGetRecentActivityQueryKey, getGetLeadsQueryKey } from "@workspace/api-client-react";
+import { useRole, ROLE_PROFILES, type UserRole } from "@/lib/role-context";
+import {
+  useGetRecentActivity, useGetLeads,
+  getGetRecentActivityQueryKey, getGetLeadsQueryKey,
+} from "@workspace/api-client-react";
 
-const mainNav = [
-  { href: "/dashboard",    label: "Dashboard",    icon: LayoutDashboard },
-  { href: "/leads",        label: "Leads",        icon: Users },
-  { href: "/properties",   label: "Properties",   icon: Building2 },
-  { href: "/deals",        label: "Deals",        icon: GitBranch },
-  { href: "/agents",       label: "Agents",       icon: UserCheck },
-  { href: "/viewings",     label: "Viewings",     icon: Calendar },
-];
+/* ─── Nav definitions ──────────────────────────────────────────────────── */
+const ALL_NAV = [
+  { id: "dashboard",    href: "/dashboard",    label: "Dashboard",    icon: LayoutDashboard },
+  { id: "leads",        href: "/leads",        label: "Leads",        icon: Users },
+  { id: "properties",   href: "/properties",   label: "Properties",   icon: Building2 },
+  { id: "deals",        href: "/deals",        label: "Deals",        icon: GitBranch },
+  { id: "agents",       href: "/agents",       label: "Agents",       icon: UserCheck },
+  { id: "viewings",     href: "/viewings",     label: "Viewings",     icon: Calendar },
+] as const;
 
-const toolsNav = [
-  { href: "/whatsapp",     label: "WhatsApp",     icon: MessageCircle },
-  { href: "/analytics",    label: "Analytics",    icon: BarChart3 },
-  { href: "/commission",   label: "Commission",   icon: Calculator },
-  { href: "/integrations", label: "Integrations", icon: Plug2 },
-];
+const ALL_TOOLS = [
+  { id: "whatsapp",     href: "/whatsapp",     label: "WhatsApp",     icon: MessageCircle },
+  { id: "analytics",    href: "/analytics",    label: "Analytics",    icon: BarChart3 },
+  { id: "commission",   href: "/commission",   label: "Commission",   icon: Calculator },
+  { id: "integrations", href: "/integrations", label: "Integrations", icon: Plug2 },
+] as const;
 
-function NavSection({ label, items, location, onNav }: {
-  label: string;
-  items: { href: string; label: string; icon: React.ComponentType<{ className?: string }> }[];
-  location: string;
-  onNav: () => void;
+/* ─── Nav item ─────────────────────────────────────────────────────────── */
+function NavItem({ href, label, icon: Icon, active, onNav, badge }: {
+  href: string; label: string; icon: React.ComponentType<{ className?: string }>;
+  active: boolean; onNav: () => void; badge?: number;
 }) {
   return (
-    <div className="mb-3">
-      <p className="text-[10px] font-semibold text-sidebar-foreground/35 uppercase tracking-widest px-3 mb-1">{label}</p>
-      {items.map(({ href, label: itemLabel, icon: Icon }) => {
-        const active = location.startsWith(href) || (href === "/dashboard" && location === "/");
-        return (
-          <Link key={href} href={href} data-testid={`nav-${itemLabel.toLowerCase()}`} onClick={onNav}
-            className={cn(
-              "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-all duration-100",
-              active
-                ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm"
-                : "text-sidebar-foreground/65 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-            )}
-          >
-            <Icon className="w-4 h-4 flex-shrink-0" />
-            {itemLabel}
-          </Link>
-        );
-      })}
+    <Link href={href} data-testid={`nav-${label.toLowerCase()}`} onClick={onNav}
+      className={cn(
+        "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-all duration-100 relative",
+        active ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm" : "text-sidebar-foreground/65 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+      )}
+    >
+      <Icon className="w-4 h-4 flex-shrink-0" />
+      {label}
+      {badge != null && badge > 0 && (
+        <span className="ml-auto w-5 h-5 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center flex-shrink-0">
+          {badge > 9 ? "9+" : badge}
+        </span>
+      )}
+    </Link>
+  );
+}
+
+/* ─── Role switcher ────────────────────────────────────────────────────── */
+function RoleSwitcher() {
+  const { role, setRole, profile } = useRole();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-sidebar-accent/50 transition-colors"
+      >
+        <div className={cn("w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0", profile.color)}>
+          {profile.avatar}
+        </div>
+        <div className="flex-1 min-w-0 text-left">
+          <p className="text-xs font-semibold text-sidebar-foreground truncate">{profile.name}</p>
+          <p className="text-[10px] text-sidebar-foreground/45 truncate">{profile.label}</p>
+        </div>
+        <ChevronDown className={cn("w-3.5 h-3.5 text-sidebar-foreground/40 transition-transform flex-shrink-0", open && "rotate-180")} />
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute bottom-full left-0 right-0 mb-1 z-50 bg-card border border-border rounded-xl shadow-xl overflow-hidden mx-2">
+            <div className="px-3 py-2 border-b border-border">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Switch Role (Demo)</p>
+            </div>
+            {ROLE_PROFILES.map((r) => (
+              <button key={r.value} onClick={() => { setRole(r.value as UserRole); setOpen(false); }}
+                className={cn("w-full flex items-center gap-3 px-3 py-2.5 hover:bg-muted/50 transition-colors text-left", role === r.value && "bg-primary/5")}
+              >
+                <div className={cn("w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0", r.color)}>
+                  {r.avatar}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-foreground">{r.name}</p>
+                  <p className="text-[10px] text-muted-foreground">{r.label}</p>
+                </div>
+                {role === r.value && <ShieldCheck className="w-3.5 h-3.5 text-primary flex-shrink-0" />}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
 
+/* ─── Notification bell ────────────────────────────────────────────────── */
 function NotificationBell() {
   const [open, setOpen] = useState(false);
   const { data: activity } = useGetRecentActivity({
@@ -66,7 +116,7 @@ function NotificationBell() {
       <button data-testid="button-notifications" onClick={() => setOpen(!open)}
         className="relative p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
       >
-        <Bell className="w-4.5 h-4.5 w-[18px] h-[18px]" />
+        <Bell className="w-[18px] h-[18px]" />
         {unread > 0 && (
           <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-primary text-primary-foreground text-[9px] font-bold rounded-full flex items-center justify-center leading-none">
             {unread}
@@ -79,9 +129,7 @@ function NotificationBell() {
           <div className="absolute right-0 top-10 z-50 w-80 bg-card border border-border rounded-xl shadow-xl overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
               <p className="text-sm font-semibold text-foreground">Notifications</p>
-              <button onClick={() => setOpen(false)} className="text-muted-foreground hover:text-foreground p-0.5 rounded">
-                <X className="w-4 h-4" />
-              </button>
+              <button onClick={() => setOpen(false)} className="text-muted-foreground hover:text-foreground p-0.5 rounded"><X className="w-4 h-4" /></button>
             </div>
             {items.length === 0 ? (
               <div className="py-8 text-center"><Bell className="w-6 h-6 mx-auto text-muted-foreground/30 mb-2" /><p className="text-sm text-muted-foreground">All caught up!</p></div>
@@ -115,6 +163,7 @@ function NotificationBell() {
   );
 }
 
+/* ─── Global search ────────────────────────────────────────────────────── */
 function GlobalSearch() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -128,11 +177,7 @@ function GlobalSearch() {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        e.preventDefault();
-        setOpen(true);
-        setTimeout(() => inputRef.current?.focus(), 50);
-      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") { e.preventDefault(); setOpen(true); setTimeout(() => inputRef.current?.focus(), 50); }
       if (e.key === "Escape") setOpen(false);
     };
     document.addEventListener("keydown", handler);
@@ -141,11 +186,7 @@ function GlobalSearch() {
 
   const results = query.length >= 2 ? (leads ?? []).slice(0, 6) : [];
 
-  function goTo(path: string) {
-    setLocation(path);
-    setOpen(false);
-    setQuery("");
-  }
+  function goTo(path: string) { setLocation(path); setOpen(false); setQuery(""); }
 
   return (
     <>
@@ -156,9 +197,7 @@ function GlobalSearch() {
       >
         <Search className="w-3.5 h-3.5 flex-shrink-0" />
         <span className="text-xs flex-1 text-left">Search leads...</span>
-        <kbd className="hidden sm:inline-flex items-center gap-0.5 text-[10px] border border-border rounded px-1 py-0.5 bg-background font-mono">
-          ⌘K
-        </kbd>
+        <kbd className="hidden sm:inline-flex items-center text-[10px] border border-border rounded px-1 py-0.5 bg-background font-mono">⌘K</kbd>
       </button>
 
       {open && (
@@ -167,18 +206,11 @@ function GlobalSearch() {
           <div className="fixed left-1/2 top-[20%] -translate-x-1/2 z-50 w-full max-w-md bg-card border border-border rounded-xl shadow-2xl overflow-hidden">
             <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
               <Search className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-              <input
-                ref={inputRef}
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
+              <input ref={inputRef} value={query} onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search leads by name, email, phone..."
                 className="flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
               />
-              {query && (
-                <button onClick={() => setQuery("")} className="text-muted-foreground hover:text-foreground">
-                  <X className="w-4 h-4" />
-                </button>
-              )}
+              {query && <button onClick={() => setQuery("")} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>}
             </div>
             {query.length < 2 ? (
               <div className="px-4 py-6 text-center text-xs text-muted-foreground">Type at least 2 characters to search</div>
@@ -203,7 +235,7 @@ function GlobalSearch() {
               </ul>
             )}
             <div className="border-t border-border px-4 py-2 flex items-center justify-between">
-              <span className="text-[10px] text-muted-foreground">↵ to open · Esc to close</span>
+              <span className="text-[10px] text-muted-foreground">↵ open · Esc close</span>
               <Link href="/leads" onClick={() => setOpen(false)} className="text-xs text-primary hover:underline">View all leads</Link>
             </div>
           </div>
@@ -213,9 +245,19 @@ function GlobalSearch() {
   );
 }
 
+/* ─── Main Layout ──────────────────────────────────────────────────────── */
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const [open, setOpen] = useState(false);
+  const { can, role } = useRole();
+
+  // Pending approvals badge (mock)
+  const approvalsBadge = (role === "owner" || role === "manager") ? 7 : 0;
+
+  const mainNav = ALL_NAV.filter(n => can(n.id));
+  const toolsNav = ALL_TOOLS.filter(n => can(n.id));
+  const showSettings = can("settings");
+  const showApprovals = can("approvals");
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -238,40 +280,48 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 overflow-y-auto">
-          <NavSection label="Main" items={mainNav} location={location} onNav={() => setOpen(false)} />
-          <NavSection label="Tools" items={toolsNav} location={location} onNav={() => setOpen(false)} />
+          {mainNav.length > 0 && (
+            <div className="mb-3">
+              <p className="text-[10px] font-semibold text-sidebar-foreground/35 uppercase tracking-widest px-3 mb-1">Main</p>
+              {mainNav.map(({ id, href, label, icon }) => (
+                <NavItem key={id} href={href} label={label} icon={icon} active={location.startsWith(href) || (href === "/dashboard" && location === "/")} onNav={() => setOpen(false)} />
+              ))}
+            </div>
+          )}
+
+          {toolsNav.length > 0 && (
+            <div className="mb-3">
+              <p className="text-[10px] font-semibold text-sidebar-foreground/35 uppercase tracking-widest px-3 mb-1">Tools</p>
+              {toolsNav.map(({ id, href, label, icon }) => (
+                <NavItem key={id} href={href} label={label} icon={icon} active={location.startsWith(href)} onNav={() => setOpen(false)} />
+              ))}
+            </div>
+          )}
+
+          {showApprovals && (
+            <div className="mb-3">
+              <p className="text-[10px] font-semibold text-sidebar-foreground/35 uppercase tracking-widest px-3 mb-1">Workflow</p>
+              <NavItem href="/approvals" label="Approvals" icon={CheckSquare} active={location.startsWith("/approvals")} onNav={() => setOpen(false)} badge={approvalsBadge} />
+            </div>
+          )}
         </nav>
 
-        {/* Settings row */}
-        <div className="px-3 pb-2">
-          <Link href="/settings" onClick={() => setOpen(false)}
-            className={cn(
-              "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-              location.startsWith("/settings")
-                ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                : "text-sidebar-foreground/65 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-            )}
-          >
-            <Settings className="w-4 h-4 flex-shrink-0" />Settings
-          </Link>
-        </div>
+        {/* Settings */}
+        {showSettings && (
+          <div className="px-3 pb-2">
+            <NavItem href="/settings" label="Settings" icon={Settings} active={location.startsWith("/settings")} onNav={() => setOpen(false)} />
+          </div>
+        )}
 
-        {/* User profile */}
-        <div className="border-t border-sidebar-border px-4 py-3 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-amber-400 flex items-center justify-center text-xs font-bold text-amber-900 flex-shrink-0">
-            PS
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold text-sidebar-foreground truncate">Priya Singh</p>
-            <p className="text-[10px] text-sidebar-foreground/40">Admin · ₹12,000/yr</p>
-          </div>
+        {/* Role switcher / profile */}
+        <div className="border-t border-sidebar-border">
+          <RoleSwitcher />
         </div>
       </aside>
 
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Top bar */}
         <header className="flex items-center gap-3 border-b border-border px-4 py-2 bg-card">
-          {/* Mobile menu */}
           <button data-testid="button-mobile-menu" onClick={() => setOpen(true)} className="p-1.5 rounded-md hover:bg-muted lg:hidden flex-shrink-0">
             <Menu className="w-5 h-5" />
           </button>
@@ -279,7 +329,6 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
             <Building2 className="w-4 h-4 text-primary" />
             <span className="font-semibold text-sm">EstateFlow</span>
           </div>
-          {/* Global search */}
           <div className="flex-1 flex justify-center lg:justify-start">
             <GlobalSearch />
           </div>

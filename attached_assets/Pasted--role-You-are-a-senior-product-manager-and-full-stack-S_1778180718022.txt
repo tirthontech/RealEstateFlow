@@ -1,0 +1,392 @@
+<role>
+You are a senior product manager and full-stack SaaS architect with deep expertise 
+in real estate operations, multi-role dashboards, and data analytics platforms. 
+You design systems that are role-aware, data-driven, and built for internal 
+operational clarity in real estate development companies.
+</role>
+
+<context>
+We are building an internal operations and management platform for a real estate 
+development company (builder/developer — not a brokerage). The company has the 
+following internal roles:
+
+ROLES:
+- Owner / Promoter (top-level, full visibility)
+- CFO / Finance Head (financial data entry and visibility)
+- Manager (approves sales data, oversees team)
+- Sales Person / Field Agent (data entry, lead management, property updates)
+- Employee (general staff, limited access)
+
+The platform has THREE distinct dashboards:
+1. Owner & Manager Dashboard (shared, with different permission levels)
+2. Employee / Salesperson Dashboard
+3. Analytics Dashboard (cross-cutting insights)
+
+This is NOT a brokerage CRM. This is an internal company dashboard for a 
+real estate DEVELOPER tracking their own projects, inventory, leads, finances, 
+and team performance.
+</context>
+
+---
+
+<task>
+Design this platform comprehensively. For each dashboard and each module, define:
+- What data is shown
+- Who enters the data (which role)
+- Who approves it (if approval is required)
+- What actions can be taken
+- What the UI should feel like
+- Edge cases and business rules
+- How it connects to other modules
+
+Think deeply. Go beyond what was described — infer what a real estate developer 
+ACTUALLY needs that they may not have articulated. Add features they would 
+discover they need within the first 3 months of using the product.
+</task>
+
+---
+
+<dashboard_1_owner_manager>
+
+## Dashboard 1 — Owner & Manager Dashboard
+
+### MODULE A: Inventory Management
+
+Purpose: Real-time visibility into every unit across all projects.
+
+Data to show:
+- Project-wise inventory breakdown:
+  - Total units (flats / plots / commercial)
+  - Available units (with floor, facing, area, base price)
+  - Sold units (buyer name, sale price, sale date, payment status)
+  - Blocked / reserved units (by whom, since when, expected conversion date)
+  - Units under construction (completion % per unit or floor)
+- Unit detail page:
+  - Floor plan image
+  - Current status (available / blocked / sold / under dispute)
+  - Pricing history (original price → revised price → final sold price)
+  - Issues / snagging list per unit (defects reported, resolution status)
+  - Documents attached (sale agreement, registry, NOC)
+- Project timeline tracker:
+  - Construction milestone dates (foundation, slab, brick, plastering, finishing, OC)
+  - Planned vs actual dates per milestone
+  - Delay flag with reason
+  - Visual Gantt-style progress bar per project
+
+Data entry: Sales person enters unit status, blocking, sales updates
+Approval flow: Manager must approve before status change is reflected on Owner view
+Owner can override any approval
+
+Business rules:
+- A unit cannot be marked "Sold" without a sale agreement document attached
+- If a unit has been "Blocked" for more than [configurable days, default 7], 
+  auto-alert the manager
+- Price changes require Manager approval AND Owner notification
+- Issues/snagging list is visible to owner but entered by site engineer or sales person
+
+---
+
+### MODULE B: Cash Flow & Finance Dashboard
+
+Purpose: Complete financial picture across all projects — investment, returns, 
+costs, profit projections.
+
+Data to show (entered by CFO / Finance Head):
+- Per-project financials:
+  - Total land cost
+  - Total construction cost (actual vs budgeted, by phase)
+  - Marketing and sales cost
+  - Legal and regulatory cost (approvals, NOCs, stamp duty)
+  - Admin overheads allocated to project
+  - Total invested amount to date
+- Revenue:
+  - Total sales value booked (all sold units at agreed price)
+  - Amount received to date (instalment-wise collections)
+  - Amount pending (payment schedule vs actual)
+  - Amount overdue (missed instalments, with buyer details)
+- Profit & loss per project:
+  - Gross margin (revenue - direct cost)
+  - Net margin after all costs
+  - Realised profit (from completed sales with full payment)
+  - Unrealised / projected profit (from booked but unpaid sales)
+- Cash flow timeline:
+  - Month-wise expected inflows (from payment schedules)
+  - Month-wise expected outflows (construction draw-down schedule)
+  - Net cash position forecast for next 3 / 6 / 12 months
+- Upcoming project estimation:
+  - For projects in pipeline: estimated investment, expected revenue, projected IRR
+  - Scenario modelling: what if price per sqft increases by 5%? What if construction 
+    cost increases by 10%?
+- Brokerage / channel partner payouts:
+  - Commission owed per deal
+  - Paid vs pending commission
+
+Approval: CFO enters, Owner reviews. No approval gate but Owner gets notification 
+on every significant entry (>₹X threshold, configurable).
+
+---
+
+### MODULE C: Lead Management (Owner / Manager view)
+
+Purpose: Full visibility into the sales pipeline — not data entry, but oversight.
+
+Data to show:
+- Total leads in system (all time, this month, this week)
+- Lead source breakdown:
+  - Where did leads come from? (Instagram ads, 99acres, site walk-in, referral, 
+    channel partner, hoarding, etc.)
+  - Cost per lead by source (if ad spend is entered)
+  - Conversion rate by source
+- Lead pipeline status:
+  - New / Uncontacted
+  - In discussion
+  - Site visit scheduled
+  - Site visit done
+  - Negotiation
+  - Booking amount received (converted to customer)
+  - Lost (with reason: budget, location, competitor, no response)
+- Customer conversion summary:
+  - How many leads became customers this month / quarter / year
+  - Average time from lead to conversion
+  - Which salesperson converted the most leads
+- Lost lead analysis:
+  - Why are leads being lost? (categorised reasons)
+  - Which sources give the most lost leads?
+- Follow-up compliance:
+  - Are salespeople following up on time?
+  - Leads with no activity in last [X] days — flagged list
+
+</dashboard_1_owner_manager>
+
+---
+
+<dashboard_2_employee_salesperson>
+
+## Dashboard 2 — Employee / Salesperson Dashboard
+
+Purpose: The daily work interface for the field team. Simple, task-focused, 
+mobile-first design.
+
+### MODULE A: My Leads
+
+- List of leads assigned to this salesperson
+- Each lead card shows:
+  - Name, phone, source, project interested in, budget
+  - Current stage in pipeline
+  - Last interaction date and summary
+  - Next follow-up due date (with reminder)
+- Lead detail page:
+  - Full lead history (calls, WhatsApp messages, site visits, notes)
+  - Lead source details
+  - Property preferences (configuration, floor preference, budget range)
+  - Documents shared with lead
+  - Add note / log call / schedule site visit
+  - Update pipeline stage
+  - Mark as converted (triggers manager approval flow)
+  - Mark as lost (requires reason selection from dropdown)
+- Incoming lead notification: new leads assigned to them trigger push notification
+- Follow-up reminders: overdue follow-ups highlighted in red
+
+### MODULE B: Inventory View (read-only)
+
+- Salesperson can view available inventory to share with leads
+- See unit details: floor, area, facing, price, availability
+- Cannot change status — only manager-approved changes reflect here
+- Quick share: generate a PDF or WhatsApp-friendly unit summary to send to lead
+
+### MODULE C: My Tasks & Schedule
+
+- Today's site visits scheduled
+- Pending follow-ups
+- Upcoming tasks assigned by manager
+- Check-in at site visit (GPS-based or manual confirmation)
+- Post-visit feedback form (mandatory before closing the visit task)
+
+### MODULE D: My Performance (personal view)
+
+- My leads this month
+- My conversions this month
+- My conversion rate
+- My average response time to new leads
+- My pending follow-ups
+- Comparison to team average (anonymised, no names of peers)
+
+### MODULE E: Upload & Data Entry
+
+- Add new lead (manual entry or from visiting card photo — OCR)
+- Update unit status (subject to manager approval)
+- Upload site visit photos to property listing
+- Upload documents (payment receipts, booking forms)
+- Report a unit issue / snagging item
+
+</dashboard_2_employee_salesperson>
+
+---
+
+<dashboard_3_analytics>
+
+## Dashboard 3 — Analytics Dashboard
+
+Purpose: Deep insights for strategic decisions. Accessible to Owner and Manager only.
+
+### SECTION A: Sales Team Performance Analytics
+
+Per-salesperson metrics:
+- Total leads handled
+- Leads converted to customers (absolute + %)
+- Average time to conversion (days from lead creation to booking)
+- Average response time to new leads
+- Site visits conducted
+- Post-visit conversion rate (what % of site visits convert)
+- Lost leads and reasons (per salesperson)
+- Customer satisfaction / feedback score (from post-visit forms)
+- Activity volume: calls logged, notes added, follow-ups completed
+
+Comparative views:
+- Leaderboard: rank salespeople by conversion rate, by revenue generated, by activity
+- Trend over time: each salesperson's performance month-over-month
+- Identify outliers: who is underperforming and where specifically in the funnel?
+- Best practices insight: what does the top performer do differently? 
+  (avg follow-up speed, visit-to-close days, etc.)
+
+---
+
+### SECTION B: Inventory & Project Analytics
+
+Per-project metrics:
+- Revenue per square foot (sold units)
+- Average discount given vs list price
+- Days to sell per unit (from listing to booking)
+- Which configurations sell fastest? (1BHK vs 2BHK vs 3BHK)
+- Which floors / facings are most popular?
+- Unsold inventory ageing: how long have available units been sitting?
+
+Cross-project comparison:
+- Which project generated the most profit per rupee invested?
+- Which location showed the best price appreciation?
+- Which project type (residential / plotted / commercial) performed best?
+- Recommended project type for next launch based on historical performance
+
+Market analysis inputs:
+- Manual input of competitor pricing (manager enters)
+- Comparison: our price vs competitor price in same micro-market
+- Price trend chart per location over time
+
+---
+
+### SECTION C: Lead Source & Marketing Analytics
+
+- Total leads by source (all time, this month, custom date range)
+- Cost per lead by source (if ad spend entered)
+- Revenue generated per lead source
+- ROI by marketing channel
+- Funnel visualisation per source:
+  - Source → Lead → Site Visit → Negotiation → Converted
+  - Drop-off rate at each stage per source
+- Best performing source for high-value conversions (not just volume)
+- Recommendation: where to increase / decrease marketing spend
+
+---
+
+### SECTION D: Financial Analytics (for Owner / CFO)
+
+- Project-wise P&L comparison
+- Collection efficiency: what % of billed amount is collected on time
+- Debtor ageing: overdue instalments by bracket (0-30 days, 31-60, 61-90, 90+)
+- Cash burn rate vs cash inflow rate
+- Projected completion: at current collection rate, when will project be cash-positive?
+- Scenario modelling: sensitivity analysis on price, construction cost, timeline
+
+</dashboard_3_analytics>
+
+---
+
+<approval_workflow>
+
+## Approval & Permission System
+
+Define clearly how data flows between roles:
+
+SALESPERSON → MANAGER → OWNER
+- Unit status changes: salesperson proposes → manager approves → reflects everywhere
+- Lead conversion to customer: salesperson marks → manager verifies → notifies owner
+- Price update on a unit: manager proposes → owner approves
+
+FINANCE HEAD → OWNER
+- Monthly P&L entry: CFO submits → owner acknowledges
+- Large expense entry (above threshold): CFO enters → owner approval required
+
+NOTIFICATIONS:
+- Owner gets daily digest: new leads, conversions, blockers, overdue collections
+- Manager gets real-time alerts: new leads assigned, pending approvals, 
+  overdue follow-ups by team members
+- Salesperson gets: new lead assigned, follow-up reminder, approval 
+  status of their submissions
+
+AUDIT TRAIL:
+- Every data change logged with: who changed it, what was changed, when, 
+  previous value vs new value
+- Owner can see full audit log for any record
+
+</approval_workflow>
+
+---
+
+<technical_requirements>
+
+## Technical Requirements
+
+### Data Model
+Design the core entities and their relationships:
+- Company → Projects → Buildings → Floors → Units
+- Leads → Lead Timeline Events → Conversions
+- Users → Roles → Permissions
+- Financial Entries → Projects
+- Tasks → Users
+- Approvals → Changes
+
+### Tech Stack (recommended)
+- Frontend: Next.js 14, TypeScript, Tailwind CSS, shadcn/ui, Recharts for analytics
+- Backend: Node.js + NestJS, REST API
+- Database: PostgreSQL with row-level security for role-based data access
+- Auth: role-based JWT with refresh tokens, MFA for owner/manager roles
+- File storage: AWS S3 for documents and images
+- Notifications: Firebase Cloud Messaging (mobile push) + email via AWS SES
+- Mobile: React Native (shares business logic with web)
+
+### Role-based access control
+Define permissions table:
+- Which role can READ each module
+- Which role can WRITE each module
+- Which role can APPROVE changes in each module
+- Which role can DELETE records
+
+### Performance
+- Dashboard must load key metrics within 2 seconds
+- Analytics queries run asynchronously — show loading state, not blank screen
+- Mobile-optimised: salesperson dashboard must work on 4G with slow connections
+- Offline capability for salesperson: view assigned leads without internet, 
+  sync when back online
+
+</technical_requirements>
+
+---
+
+<output_format>
+
+For each dashboard and each module, provide:
+1. Strategic rationale — why this module exists and what decision it enables
+2. Detailed feature specification — every field, every action, every state
+3. Data flow — who enters, who approves, who sees it
+4. UI/UX direction — layout description, key interactions, mobile vs desktop
+5. Business rules and edge cases — what should the system prevent or enforce?
+6. Integration points — how does this module connect to others?
+7. [MVP] vs [Phase 2] vs [Phase 3] tags for each feature
+
+At the end, produce:
+- A complete role-permission matrix (table)
+- A recommended MVP scope for a 60-day build
+- The database schema for the 5 core entities
+- A suggested notification system design (who gets what, when, through which channel)
+
+</output_format>

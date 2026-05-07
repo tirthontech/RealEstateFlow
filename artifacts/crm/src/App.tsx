@@ -2,6 +2,7 @@ import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { RoleProvider } from "@/lib/role-context";
 import MainLayout from "@/components/MainLayout";
 import NotFound from "@/pages/not-found";
 import DashboardPage from "@/pages/dashboard";
@@ -18,6 +19,7 @@ import IntegrationsPage from "@/pages/integrations";
 import SettingsPage from "@/pages/settings";
 import CommissionPage from "@/pages/commission";
 import ViewingsPage from "@/pages/viewings";
+import ApprovalsPage from "@/pages/approvals";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
@@ -27,40 +29,39 @@ function Router() {
   return (
     <MainLayout>
       <Switch>
-        <Route path="/">
-          <Redirect to="/dashboard" />
-        </Route>
-        <Route path="/dashboard" component={DashboardPage} />
-        <Route path="/leads" component={LeadsPage} />
-        <Route path="/leads/:id" component={LeadDetailPage} />
-        <Route path="/properties" component={PropertiesPage} />
-        <Route path="/properties/:id" component={PropertyDetailPage} />
-        <Route path="/deals" component={DealsPage} />
-        <Route path="/agents" component={AgentsPage} />
-        <Route path="/agents/:id" component={AgentDetailPage} />
-        <Route path="/viewings" component={ViewingsPage} />
-        <Route path="/analytics" component={AnalyticsPage} />
-        <Route path="/whatsapp" component={WhatsAppPage} />
-        <Route path="/integrations" component={IntegrationsPage} />
-        <Route path="/commission" component={CommissionPage} />
-        <Route path="/settings" component={SettingsPage} />
+        <Route path="/"><Redirect to="/dashboard" /></Route>
+        <Route path="/dashboard"       component={DashboardPage} />
+        <Route path="/leads"           component={LeadsPage} />
+        <Route path="/leads/:id"       component={LeadDetailPage} />
+        <Route path="/properties"      component={PropertiesPage} />
+        <Route path="/properties/:id"  component={PropertyDetailPage} />
+        <Route path="/deals"           component={DealsPage} />
+        <Route path="/agents"          component={AgentsPage} />
+        <Route path="/agents/:id"      component={AgentDetailPage} />
+        <Route path="/viewings"        component={ViewingsPage} />
+        <Route path="/analytics"       component={AnalyticsPage} />
+        <Route path="/whatsapp"        component={WhatsAppPage} />
+        <Route path="/integrations"    component={IntegrationsPage} />
+        <Route path="/commission"      component={CommissionPage} />
+        <Route path="/settings"        component={SettingsPage} />
+        <Route path="/approvals"       component={ApprovalsPage} />
         <Route component={NotFound} />
       </Switch>
     </MainLayout>
   );
 }
 
-function App() {
+export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <Router />
-        </WouterRouter>
-        <Toaster />
+        <RoleProvider>
+          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <Router />
+          </WouterRouter>
+          <Toaster />
+        </RoleProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );
 }
-
-export default App;
