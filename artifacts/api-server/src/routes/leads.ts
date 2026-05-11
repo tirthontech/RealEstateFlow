@@ -54,7 +54,12 @@ router.post("/leads", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [lead] = await db.insert(leadsTable).values({ ...parsed.data, status: parsed.data.status ?? "new", score: parsed.data.score ?? 50 }).returning();
+  const [lead] = await db.insert(leadsTable).values({
+    ...parsed.data,
+    budget: parsed.data.budget != null ? String(parsed.data.budget) : parsed.data.budget,
+    status: parsed.data.status ?? "new",
+    score: parsed.data.score ?? 50,
+  }).returning();
 
   let agentName: string | null = null;
   if (lead.assignedTo) {
@@ -106,7 +111,10 @@ router.put("/leads/:id", async (req, res): Promise<void> => {
   }
   const [lead] = await db
     .update(leadsTable)
-    .set(parsed.data)
+    .set({
+      ...parsed.data,
+      budget: parsed.data.budget != null ? String(parsed.data.budget) : parsed.data.budget,
+    })
     .where(eq(leadsTable.id, params.data.id))
     .returning();
   if (!lead) {

@@ -3,9 +3,9 @@ import {
   LayoutDashboard, Users, Building2, GitBranch, UserCheck,
   Menu, BarChart3, MessageCircle, Plug2, Settings, Calculator,
   Calendar, Bell, X, Search, ChevronRight, ShieldCheck, ChevronDown,
-  CheckSquare,
+  CheckSquare, CalendarCheck,
 } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { useRole, ROLE_PROFILES, type UserRole } from "@/lib/role-context";
 import {
@@ -21,6 +21,7 @@ const ALL_NAV = [
   { id: "deals",        href: "/deals",        label: "Deals",        icon: GitBranch },
   { id: "agents",       href: "/agents",       label: "Agents",       icon: UserCheck },
   { id: "viewings",     href: "/viewings",     label: "Viewings",     icon: Calendar },
+  { id: "activities",   href: "/activities",   label: "Activities",   icon: CalendarCheck },
 ] as const;
 
 const ALL_TOOLS = [
@@ -167,12 +168,19 @@ function NotificationBell() {
 function GlobalSearch() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const [, setLocation] = useLocation();
 
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query), 300);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  const searchParams = debouncedQuery.length >= 2 ? { search: debouncedQuery } : {};
   const { data: leads } = useGetLeads(
-    query.length >= 2 ? { search: query } : {},
-    { query: { queryKey: getGetLeadsQueryKey(query.length >= 2 ? { search: query } : {}), enabled: open && query.length >= 2 } }
+    searchParams,
+    { query: { queryKey: getGetLeadsQueryKey(searchParams), enabled: open && debouncedQuery.length >= 2 } }
   );
 
   useEffect(() => {
@@ -184,9 +192,9 @@ function GlobalSearch() {
     return () => document.removeEventListener("keydown", handler);
   }, []);
 
-  const results = query.length >= 2 ? (leads ?? []).slice(0, 6) : [];
+  const results = debouncedQuery.length >= 2 ? (leads ?? []).slice(0, 6) : [];
 
-  function goTo(path: string) { setLocation(path); setOpen(false); setQuery(""); }
+  const goTo = useCallback((path: string) => { setLocation(path); setOpen(false); setQuery(""); }, [setLocation]);
 
   return (
     <>
@@ -251,8 +259,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const [open, setOpen] = useState(false);
   const { can, role } = useRole();
 
-  // Pending approvals badge (mock)
-  const approvalsBadge = (role === "owner" || role === "manager") ? 7 : 0;
+  const approvalsBadge = 0;
 
   const mainNav = ALL_NAV.filter(n => can(n.id));
   const toolsNav = ALL_TOOLS.filter(n => can(n.id));

@@ -3,3 +3,4 @@ export * from "./leads";
 export * from "./properties";
 export * from "./deals";
 export * from "./activity";
+export * from "./viewings";

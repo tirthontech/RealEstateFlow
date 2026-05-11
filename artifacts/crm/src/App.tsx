@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { RoleProvider } from "@/lib/role-context";
 import MainLayout from "@/components/MainLayout";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import NotFound from "@/pages/not-found";
 import DashboardPage from "@/pages/dashboard";
 import LeadsPage from "@/pages/leads";
@@ -20,9 +21,21 @@ import SettingsPage from "@/pages/settings";
 import CommissionPage from "@/pages/commission";
 import ViewingsPage from "@/pages/viewings";
 import ApprovalsPage from "@/pages/approvals";
+import ActivitiesPage from "@/pages/activities";
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      staleTime: 30_000,
+      gcTime: 5 * 60_000,       // keep unused cache for 5 min before GC
+      refetchOnWindowFocus: false, // avoid surprising refetches while typing
+    },
+    mutations: {
+      // surface mutation errors to React Query devtools
+      throwOnError: false,
+    },
+  },
 });
 
 function Router() {
@@ -45,6 +58,7 @@ function Router() {
         <Route path="/commission"      component={CommissionPage} />
         <Route path="/settings"        component={SettingsPage} />
         <Route path="/approvals"       component={ApprovalsPage} />
+        <Route path="/activities"      component={ActivitiesPage} />
         <Route component={NotFound} />
       </Switch>
     </MainLayout>
@@ -57,7 +71,9 @@ export default function App() {
       <TooltipProvider>
         <RoleProvider>
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-            <Router />
+            <ErrorBoundary>
+              <Router />
+            </ErrorBoundary>
           </WouterRouter>
           <Toaster />
         </RoleProvider>

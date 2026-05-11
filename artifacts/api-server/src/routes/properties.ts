@@ -46,7 +46,12 @@ router.post("/properties", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [prop] = await db.insert(propertiesTable).values({ ...parsed.data, status: parsed.data.status ?? "available" }).returning();
+  const [prop] = await db.insert(propertiesTable).values({
+    ...parsed.data,
+    price: String(parsed.data.price),
+    areaSqft: parsed.data.areaSqft != null ? String(parsed.data.areaSqft) : parsed.data.areaSqft,
+    status: parsed.data.status ?? "available",
+  }).returning();
 
   let agentName: string | null = null;
   if (prop.agentId) {
@@ -98,7 +103,11 @@ router.put("/properties/:id", async (req, res): Promise<void> => {
   }
   const [prop] = await db
     .update(propertiesTable)
-    .set(parsed.data)
+    .set({
+      ...parsed.data,
+      price: parsed.data.price !== undefined ? String(parsed.data.price) : undefined,
+      areaSqft: parsed.data.areaSqft != null ? String(parsed.data.areaSqft) : parsed.data.areaSqft,
+    })
     .where(eq(propertiesTable.id, params.data.id))
     .returning();
   if (!prop) {

@@ -6,10 +6,17 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatCurrency(value: number): string {
+  if (!Number.isFinite(value) || Number.isNaN(value)) return "₹—";
+  if (value < 0) return `-${formatCurrency(-value)}`;
   if (value >= 10_000_000) return `₹${(value / 10_000_000).toFixed(1)}Cr`;
   if (value >= 100_000) return `₹${(value / 100_000).toFixed(1)}L`;
   if (value >= 1_000) return `₹${(value / 1_000).toFixed(0)}k`;
   return `₹${value.toFixed(0)}`;
+}
+
+export function formatNumber(value: number): string {
+  if (!Number.isFinite(value) || Number.isNaN(value)) return "—";
+  return new Intl.NumberFormat("en-IN").format(value);
 }
 
 export function formatDate(dateStr: string): string {
@@ -18,7 +25,9 @@ export function formatDate(dateStr: string): string {
 
 export function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
+  if (diff <= 0) return "just now";
   const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
   if (mins < 60) return `${mins}m ago`;
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h ago`;

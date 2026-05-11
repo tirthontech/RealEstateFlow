@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker version *)",
+      "Bash(node -e \"const {Pool} = require\\('pg'\\); const p = new Pool\\({connectionString:'postgresql://postgres:postgres@localhost:5432/realestateflow'}\\); p.query\\('SELECT 1'\\).then\\(r => console.log\\('Connected:', r.rows\\)\\).catch\\(e => console.log\\('Error:', e.message\\)\\).finally\\(\\(\\) => p.end\\(\\)\\);\")",
+      "Bash(DATABASE_URL=\"postgresql://postgres:postgres@localhost:5432/realestateflow\" ../../node_modules/.bin/drizzle-kit push --config ./drizzle.config.js)",
+      "PowerShell(Get-Process -Name \"node\" -ErrorAction SilentlyContinue | Where-Object { $_.Id -eq 18120 } | Stop-Process -Force -ErrorAction SilentlyContinue; Write-Host \"Stopped\")",
+      "PowerShell(ls \"c:\\\\Users\\\\aksha\\\\OneDrive\\\\Desktop\\\\RealEstate_Flow\\\\RealEstate_Flow\\\\artifacts\\\\crm\" | ? { $_.Name -match \"tailwind|config|css\" })",
+      "Bash(pnpm --filter crm typecheck)"
+    ]
+  }
+}

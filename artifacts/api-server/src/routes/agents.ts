@@ -121,4 +121,19 @@ router.put("/agents/:id", async (req, res): Promise<void> => {
   });
 });
 
+router.delete("/agents/:id", async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(raw, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+  const [agent] = await db.delete(agentsTable).where(eq(agentsTable.id, id)).returning();
+  if (!agent) {
+    res.status(404).json({ error: "Agent not found" });
+    return;
+  }
+  res.sendStatus(204);
+});
+
 export default router;

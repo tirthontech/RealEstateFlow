@@ -25,17 +25,18 @@ type FormValues = z.infer<typeof editSchema>;
 
 export default function PropertyDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const numId = parseInt(id ?? "", 10);
   const [, setLocation] = useLocation();
   const qc = useQueryClient();
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
 
-  const { data: prop, isLoading } = useGetProperty(Number(id), { query: { queryKey: getGetPropertyQueryKey(Number(id)) } });
+  const { data: prop, isLoading } = useGetProperty(numId, { query: { queryKey: getGetPropertyQueryKey(numId), enabled: !isNaN(numId) } });
   const { data: agents } = useGetAgents();
   const updateProperty = useUpdateProperty({
     mutation: {
       onSuccess: () => {
-        qc.invalidateQueries({ queryKey: getGetPropertyQueryKey(Number(id)) });
+        qc.invalidateQueries({ queryKey: getGetPropertyQueryKey(numId) });
         qc.invalidateQueries({ queryKey: getGetPropertiesQueryKey() });
         setEditing(false);
         toast({ title: "Property updated" });
@@ -57,11 +58,12 @@ export default function PropertyDetailPage() {
     }
   }, [prop, form]);
 
+  if (isNaN(numId)) return <div className="p-6 text-muted-foreground">Invalid property ID</div>;
   if (isLoading) return <div className="p-6"><div className="h-8 w-48 bg-muted rounded animate-pulse" /></div>;
   if (!prop) return <div className="p-6 text-muted-foreground">Property not found</div>;
 
   function onSubmit(values: FormValues) {
-    updateProperty.mutate({ id: Number(id), data: { ...values, bedrooms: values.bedrooms ?? null, bathrooms: values.bathrooms ?? null, areaSqft: values.areaSqft ?? null, description: values.description ?? null, agentId: values.agentId ?? null } });
+    updateProperty.mutate({ id: numId, data: { ...values, bedrooms: values.bedrooms ?? null, bathrooms: values.bathrooms ?? null, areaSqft: values.areaSqft ?? null, description: values.description ?? null, agentId: values.agentId ?? null } });
   }
 
   return (

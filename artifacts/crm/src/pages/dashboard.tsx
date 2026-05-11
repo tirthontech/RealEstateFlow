@@ -1,8 +1,11 @@
 import { useState, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetDashboardStats, useGetDashboardPipeline, useGetRecentActivity,
   useGetLeadSources, useGetLeads, useGetAgents, getGetLeadsQueryKey,
+  useCreateLead,
 } from "@workspace/api-client-react";
+import type { DashboardStats, LeadSource, PipelineStage, ActivityItem } from "@workspace/api-client-react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts";
@@ -10,10 +13,12 @@ import {
   Building2, Users, TrendingUp, GitBranch, Activity, ArrowUpRight, ArrowDownRight,
   AlertTriangle, CheckCircle2, Clock, Target, DollarSign, BarChart3, Layers,
   UserCheck, ChevronRight, Home, ShieldCheck, Zap, XCircle, TrendingDown, Calendar,
+  Pencil, Plus, CheckCheck, Phone, X, HandCoins, BarChart2,
 } from "lucide-react";
-import { cn, formatCurrency, stageLabel, timeAgo, scoreColor } from "@/lib/utils";
+import { cn, formatCurrency, stageLabel, timeAgo, scoreColor, statusColor } from "@/lib/utils";
 import { Link } from "wouter";
 import { useRole } from "@/lib/role-context";
+import { useToast } from "@/hooks/use-toast";
 
 /* ─── Primitives ──────────────────────────────────────────────────────── */
 function Card({ children, className }: { children: React.ReactNode; className?: string }) {
@@ -188,11 +193,24 @@ const COLORS = ["#f59e0b", "#1e3a5f", "#10b981", "#8b5cf6", "#ef4444", "#3b82f6"
 /* ─── INVENTORY ───────────────────────────────────────────────────────── */
 function InventoryTab() {
   const [expandedProject, setExpandedProject] = useState<number | null>(null);
+  const [blockedUnits, setBlockedUnits] = useState([...BLOCKED_UNITS]);
+  const { toast } = useToast();
+
   const totalUnits  = PROJECTS.reduce((s, p) => s + p.totalUnits, 0);
   const totalSold   = PROJECTS.reduce((s, p) => s + p.sold, 0);
   const totalAvail  = PROJECTS.reduce((s, p) => s + p.available, 0);
   const totalIssues = PROJECTS.reduce((s, p) => s + p.issues, 0);
   const pending     = PROJECTS.reduce((s, p) => s + p.pendingApprovals, 0);
+
+  function approveUnit(unit: string) {
+    setBlockedUnits((prev) => prev.filter((u) => u.unit !== unit));
+    toast({ title: `Unit ${unit} approved`, description: "Booking confirmed and moved to active pipeline." });
+  }
+
+  function releaseUnit(unit: string) {
+    setBlockedUnits((prev) => prev.filter((u) => u.unit !== unit));
+    toast({ title: `Unit ${unit} released`, description: "Unit is now available for re-booking.", variant: "destructive" });
+  }
 
   return (
     <div className="space-y-5">
@@ -205,10 +223,11 @@ function InventoryTab() {
       </div>
 
       {/* Blocked Units Alert */}
+      {blockedUnits.length > 0 && (
       <Card className="border-amber-200 bg-amber-50/40 !p-4">
-        <SectionTitle icon={AlertTriangle} title="Blocked Units Alert" sub={`${BLOCKED_UNITS.length} units blocked beyond 7-day threshold`} />
+        <SectionTitle icon={AlertTriangle} title="Blocked Units Alert" sub={`${blockedUnits.length} unit${blockedUnits.length !== 1 ? "s" : ""} blocked beyond 7-day threshold`} />
         <div className="space-y-2">
-          {BLOCKED_UNITS.map((u) => (
+          {blockedUnits.map((u) => (
             <div key={u.unit} className="flex flex-col sm:flex-row sm:items-center gap-3 bg-card rounded-lg px-3 py-3 border border-amber-100">
               <div className="flex items-center gap-3 flex-1 min-w-0">
                 <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center text-xs font-bold flex-shrink-0">{u.days}d</div>
@@ -220,13 +239,14 @@ function InventoryTab() {
                 </div>
               </div>
               <div className="flex gap-2 flex-shrink-0 sm:ml-auto">
-                <button className="flex-1 sm:flex-none text-xs px-3 py-1.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors">Approve</button>
-                <button className="flex-1 sm:flex-none text-xs px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-lg font-medium hover:bg-red-100 transition-colors">Release</button>
+                <button onClick={() => approveUnit(u.unit)} className="flex-1 sm:flex-none text-xs px-3 py-1.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors">Approve</button>
+                <button onClick={() => releaseUnit(u.unit)} className="flex-1 sm:flex-none text-xs px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-lg font-medium hover:bg-red-100 transition-colors">Release</button>
               </div>
             </div>
           ))}
         </div>
       </Card>
+      )}
 
       {/* Project cards */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -306,19 +326,50 @@ function InventoryTab() {
   );
 }
 
+type PaymentEntry = { buyer: string; unit: string; project: string; dueDate: string; amount: number; days: number };
+type ProjectFinancial = { project: string; invested: number; collected: number; outstanding: number; expectedRevenue: number; margin: number };
+
 /* ─── CASH FLOW ───────────────────────────────────────────────────────── */
-function CashFlowTab() {
+function CashFlowTab({ editable = false }: { editable?: boolean }) {
   const [priceAdj, setPriceAdj] = useState(0);
   const [costAdj, setCostAdj] = useState(0);
 
+  const [payments, setPayments] = useState<PaymentEntry[]>([...OVERDUE_COLLECTIONS]);
+  const [projects, setProjects] = useState<ProjectFinancial[]>([...CASH_FLOW]);
+  const [editingPayment, setEditingPayment] = useState<PaymentEntry | null>(null);
+  const [addingPayment, setAddingPayment] = useState(false);
+  const [editingProject, setEditingProject] = useState<ProjectFinancial | null>(null);
+  const [newPmt, setNewPmt] = useState<Partial<PaymentEntry>>({});
+  const [editPmt, setEditPmt] = useState<Partial<PaymentEntry>>({});
+  const [editProj, setEditProj] = useState<Partial<ProjectFinancial>>({});
+
+  function markPaid(buyer: string) {
+    setPayments(prev => prev.filter(p => p.buyer !== buyer));
+  }
+  function saveEditPayment() {
+    if (!editingPayment) return;
+    setPayments(prev => prev.map(p => p.buyer === editingPayment.buyer ? { ...editingPayment, ...editPmt } as PaymentEntry : p));
+    setEditingPayment(null); setEditPmt({});
+  }
+  function saveAddPayment() {
+    if (!newPmt.buyer || !newPmt.amount) return;
+    setPayments(prev => [...prev, { buyer: newPmt.buyer!, unit: newPmt.unit ?? "—", project: newPmt.project ?? "—", dueDate: newPmt.dueDate ?? "—", amount: Number(newPmt.amount), days: Number(newPmt.days ?? 0) }]);
+    setAddingPayment(false); setNewPmt({});
+  }
+  function saveEditProject() {
+    if (!editingProject) return;
+    setProjects(prev => prev.map(p => p.project === editingProject.project ? { ...editingProject, ...editProj } as ProjectFinancial : p));
+    setEditingProject(null); setEditProj({});
+  }
+
   const totals = useMemo(() => ({
-    invested:    CASH_FLOW.reduce((s, c) => s + c.invested, 0),
-    collected:   CASH_FLOW.reduce((s, c) => s + c.collected, 0),
-    outstanding: CASH_FLOW.reduce((s, c) => s + c.outstanding, 0),
-    expected:    CASH_FLOW.reduce((s, c) => s + c.expectedRevenue, 0),
-    overdue:     OVERDUE_COLLECTIONS.reduce((s, c) => s + c.amount, 0),
-    avgMargin:   CASH_FLOW.reduce((s, c) => s + c.margin, 0) / CASH_FLOW.length,
-  }), []);
+    invested:    projects.reduce((s, c) => s + c.invested, 0),
+    collected:   projects.reduce((s, c) => s + c.collected, 0),
+    outstanding: projects.reduce((s, c) => s + c.outstanding, 0),
+    expected:    projects.reduce((s, c) => s + c.expectedRevenue, 0),
+    overdue:     payments.reduce((s, c) => s + c.amount, 0),
+    avgMargin:   projects.length > 0 ? projects.reduce((s, c) => s + c.margin, 0) / projects.length : 0,
+  }), [projects, payments]);
 
   const baseProfit     = totals.expected - totals.invested;
   const scenarioProfit = (totals.expected * (1 + priceAdj / 100)) - (totals.invested * (1 + costAdj / 100));
@@ -336,43 +387,130 @@ function CashFlowTab() {
 
       {/* Overdue collections */}
       <Card className="border-red-200 bg-red-50/20">
-        <SectionTitle icon={AlertTriangle} title="Overdue Instalments" sub="Buyers with missed payment deadlines" />
-        <ScrollTable minWidth={480}>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border">
-                {["Buyer", "Unit / Project", "Due Date", "Amount", "Overdue"].map(h => (
-                  <th key={h} className="text-left pb-2 text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider pr-3 whitespace-nowrap">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {OVERDUE_COLLECTIONS.map((c) => (
-                <tr key={c.buyer} className="hover:bg-muted/20">
-                  <td className="py-2.5 pr-3 font-medium text-foreground whitespace-nowrap text-sm">{c.buyer}</td>
-                  <td className="py-2.5 pr-3 text-xs">
-                    <span className="font-medium text-foreground">{c.unit}</span>
-                    <span className="text-muted-foreground"> · {c.project}</span>
-                  </td>
-                  <td className="py-2.5 pr-3 text-xs text-muted-foreground whitespace-nowrap">{c.dueDate}</td>
-                  <td className="py-2.5 pr-3 font-semibold text-sm whitespace-nowrap">{formatCurrency(c.amount)}</td>
-                  <td className="py-2.5">
-                    <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap",
-                      c.days > 15 ? "bg-red-100 text-red-700" : c.days > 7 ? "bg-amber-100 text-amber-700" : "bg-yellow-100 text-yellow-700")}>
-                      {c.days}d
-                    </span>
-                  </td>
+        <SectionTitle icon={AlertTriangle} title="Overdue Instalments" sub="Buyers with missed payment deadlines"
+          action={editable ? (
+            <button onClick={() => { setNewPmt({}); setAddingPayment(true); }}
+              className="flex items-center gap-1 text-xs px-2.5 py-1.5 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 transition-opacity whitespace-nowrap">
+              <Plus className="w-3 h-3" />Add Entry
+            </button>
+          ) : undefined}
+        />
+        {payments.length === 0 ? (
+          <div className="py-6 text-center text-sm text-muted-foreground">No overdue instalments — all caught up!</div>
+        ) : (
+          <ScrollTable minWidth={editable ? 560 : 480}>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  {["Buyer", "Unit / Project", "Due Date", "Amount", "Overdue", ...(editable ? ["Actions"] : [])].map(h => (
+                    <th key={h} className="text-left pb-2 text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider pr-3 whitespace-nowrap">{h}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </ScrollTable>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {payments.map((c) => (
+                  <tr key={c.buyer} className="hover:bg-muted/20">
+                    <td className="py-2.5 pr-3 font-medium text-foreground whitespace-nowrap text-sm">{c.buyer}</td>
+                    <td className="py-2.5 pr-3 text-xs">
+                      <span className="font-medium text-foreground">{c.unit}</span>
+                      <span className="text-muted-foreground"> · {c.project}</span>
+                    </td>
+                    <td className="py-2.5 pr-3 text-xs text-muted-foreground whitespace-nowrap">{c.dueDate}</td>
+                    <td className="py-2.5 pr-3 font-semibold text-sm whitespace-nowrap">{formatCurrency(c.amount)}</td>
+                    <td className="py-2.5 pr-3">
+                      <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap",
+                        c.days > 15 ? "bg-red-100 text-red-700" : c.days > 7 ? "bg-amber-100 text-amber-700" : "bg-yellow-100 text-yellow-700")}>
+                        {c.days}d
+                      </span>
+                    </td>
+                    {editable && (
+                      <td className="py-2.5">
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => { setEditingPayment(c); setEditPmt({ ...c }); }}
+                            className="p-1 rounded hover:bg-blue-50 text-blue-600 transition-colors" title="Edit">
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={() => markPaid(c.buyer)}
+                            className="p-1 rounded hover:bg-green-50 text-green-600 transition-colors" title="Mark as Paid">
+                            <CheckCheck className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </ScrollTable>
+        )}
         <p className="mt-3 text-xs text-muted-foreground flex items-start gap-1">
           <Zap className="w-3 h-3 text-red-500 flex-shrink-0 mt-0.5" />
           Total overdue: <span className="font-semibold text-red-600 ml-0.5">{formatCurrency(totals.overdue)}</span>
           <span className="hidden sm:inline"> — legal notice recommended for 15+ day cases</span>
         </p>
       </Card>
+
+      {/* Edit Payment Modal */}
+      {editingPayment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-card rounded-xl border border-border shadow-xl w-full max-w-sm p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-foreground">Edit Payment Entry</h3>
+              <button onClick={() => { setEditingPayment(null); setEditPmt({}); }} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+            </div>
+            {([
+              { label: "Buyer Name", key: "buyer", type: "text" },
+              { label: "Unit", key: "unit", type: "text" },
+              { label: "Project", key: "project", type: "text" },
+              { label: "Due Date", key: "dueDate", type: "text" },
+              { label: "Amount (₹)", key: "amount", type: "number" },
+              { label: "Days Overdue", key: "days", type: "number" },
+            ] as const).map(({ label, key, type }) => (
+              <div key={key}>
+                <label className="text-xs font-medium text-muted-foreground block mb-1">{label}</label>
+                <input type={type} value={String((editPmt as Record<string, unknown>)[key] ?? "")}
+                  onChange={e => setEditPmt(p => ({ ...p, [key]: type === "number" ? Number(e.target.value) : e.target.value }))}
+                  className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/30" />
+              </div>
+            ))}
+            <div className="flex gap-2 pt-1">
+              <button onClick={saveEditPayment} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">Save</button>
+              <button onClick={() => { setEditingPayment(null); setEditPmt({}); }} className="flex-1 py-2 border border-border rounded-lg text-sm font-medium hover:bg-muted/50 transition-colors">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Payment Modal */}
+      {addingPayment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-card rounded-xl border border-border shadow-xl w-full max-w-sm p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-foreground">Add Payment Entry</h3>
+              <button onClick={() => { setAddingPayment(false); setNewPmt({}); }} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+            </div>
+            {([
+              { label: "Buyer Name *", key: "buyer", type: "text" },
+              { label: "Unit", key: "unit", type: "text" },
+              { label: "Project", key: "project", type: "text" },
+              { label: "Due Date", key: "dueDate", type: "text", placeholder: "e.g. May 15" },
+              { label: "Amount (₹) *", key: "amount", type: "number" },
+              { label: "Days Overdue", key: "days", type: "number" },
+            ] as const).map(({ label, key, type, placeholder }: { label: string; key: string; type: string; placeholder?: string }) => (
+              <div key={key}>
+                <label className="text-xs font-medium text-muted-foreground block mb-1">{label}</label>
+                <input type={type} placeholder={placeholder ?? ""} value={String((newPmt as Record<string, unknown>)[key] ?? "")}
+                  onChange={e => setNewPmt(p => ({ ...p, [key]: type === "number" ? Number(e.target.value) : e.target.value }))}
+                  className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/30" />
+              </div>
+            ))}
+            <div className="flex gap-2 pt-1">
+              <button onClick={saveAddPayment} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">Add</button>
+              <button onClick={() => { setAddingPayment(false); setNewPmt({}); }} className="flex-1 py-2 border border-border rounded-lg text-sm font-medium hover:bg-muted/50 transition-colors">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Monthly chart */}
       <Card>
@@ -396,17 +534,17 @@ function CashFlowTab() {
       {/* Project table */}
       <Card>
         <SectionTitle icon={Layers} title="Project-wise Financial Summary" sub="Investment, collections, projected profit" />
-        <ScrollTable minWidth={560}>
+        <ScrollTable minWidth={editable ? 640 : 560}>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">
-                {["Project", "Invested", "Collected", "Outstanding", "Expected", "Profit", "Margin"].map(h => (
+                {["Project", "Invested", "Collected", "Outstanding", "Expected", "Profit", "Margin", ...(editable ? [""] : [])].map(h => (
                   <th key={h} className="text-left pb-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider pr-3 whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {CASH_FLOW.map((c) => (
+              {projects.map((c) => (
                 <tr key={c.project} className="hover:bg-muted/20">
                   <td className="py-2.5 pr-3 font-medium text-foreground text-xs whitespace-nowrap">{c.project}</td>
                   <td className="py-2.5 pr-3 text-muted-foreground text-xs whitespace-nowrap">{formatCurrency(c.invested)}</td>
@@ -414,7 +552,15 @@ function CashFlowTab() {
                   <td className="py-2.5 pr-3 text-amber-600 text-xs whitespace-nowrap">{formatCurrency(c.outstanding)}</td>
                   <td className="py-2.5 pr-3 text-xs whitespace-nowrap">{formatCurrency(c.expectedRevenue)}</td>
                   <td className="py-2.5 pr-3 text-emerald-600 font-semibold text-xs whitespace-nowrap">{formatCurrency(c.expectedRevenue - c.invested)}</td>
-                  <td className="py-2.5"><span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-green-50 text-green-700 whitespace-nowrap">{c.margin}%</span></td>
+                  <td className="py-2.5 pr-3"><span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-green-50 text-green-700 whitespace-nowrap">{c.margin}%</span></td>
+                  {editable && (
+                    <td className="py-2.5">
+                      <button onClick={() => { setEditingProject(c); setEditProj({ ...c }); }}
+                        className="p-1 rounded hover:bg-blue-50 text-blue-600 transition-colors" title="Edit">
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -427,11 +573,42 @@ function CashFlowTab() {
                 <td className="py-2.5 pr-3 whitespace-nowrap">{formatCurrency(totals.expected)}</td>
                 <td className="py-2.5 pr-3 text-emerald-600 whitespace-nowrap">{formatCurrency(totals.expected - totals.invested)}</td>
                 <td className="py-2.5 text-green-700">{totals.avgMargin.toFixed(1)}%</td>
+                {editable && <td />}
               </tr>
             </tfoot>
           </table>
         </ScrollTable>
       </Card>
+
+      {/* Edit Project Modal */}
+      {editingProject && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-card rounded-xl border border-border shadow-xl w-full max-w-sm p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-foreground text-sm">Edit: {editingProject.project}</h3>
+              <button onClick={() => { setEditingProject(null); setEditProj({}); }} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+            </div>
+            {([
+              { label: "Invested (₹)", key: "invested" },
+              { label: "Collected (₹)", key: "collected" },
+              { label: "Outstanding (₹)", key: "outstanding" },
+              { label: "Expected Revenue (₹)", key: "expectedRevenue" },
+              { label: "Margin (%)", key: "margin" },
+            ] as const).map(({ label, key }) => (
+              <div key={key}>
+                <label className="text-xs font-medium text-muted-foreground block mb-1">{label}</label>
+                <input type="number" value={String((editProj as Record<string, unknown>)[key] ?? "")}
+                  onChange={e => setEditProj(p => ({ ...p, [key]: Number(e.target.value) }))}
+                  className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/30" />
+              </div>
+            ))}
+            <div className="flex gap-2 pt-1">
+              <button onClick={saveEditProject} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">Save</button>
+              <button onClick={() => { setEditingProject(null); setEditProj({}); }} className="flex-1 py-2 border border-border rounded-lg text-sm font-medium hover:bg-muted/50 transition-colors">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Scenario modelling */}
       <Card className="border-blue-200 bg-blue-50/20">
@@ -478,10 +655,10 @@ function CashFlowTab() {
 
 /* ─── LEAD MANAGEMENT ─────────────────────────────────────────────────── */
 function LeadManagementTab({ stats, sources, pipeline, activity }: {
-  stats: ReturnType<typeof useGetDashboardStats>["data"];
-  sources: ReturnType<typeof useGetLeadSources>["data"];
-  pipeline: ReturnType<typeof useGetDashboardPipeline>["data"];
-  activity: ReturnType<typeof useGetRecentActivity>["data"];
+  stats: DashboardStats | undefined;
+  sources: LeadSource[] | undefined;
+  pipeline: PipelineStage[] | undefined;
+  activity: ActivityItem[] | undefined;
 }) {
   const { data: allLeads } = useGetLeads({}, { query: { queryKey: getGetLeadsQueryKey({}) } });
   const leadList = allLeads ?? [];
@@ -738,30 +915,161 @@ function AnalysisTab() {
   );
 }
 
+/* ─── QUICK LEAD DIALOG ───────────────────────────────────────────────── */
+function QuickLeadDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const createLead = useCreateLead({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getGetLeadsQueryKey({}) });
+        toast({ title: "Lead logged successfully" });
+        onClose();
+        setForm({ name: "", phone: "", source: "phone", budget: "", notes: "" });
+      },
+      onError: () => toast({ title: "Failed to log lead", variant: "destructive" }),
+    },
+  });
+  const [form, setForm] = useState({ name: "", phone: "", source: "phone", budget: "", notes: "" });
+
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+      <div className="bg-card rounded-xl border border-border shadow-xl w-full max-w-sm p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 rounded-lg bg-green-100"><Phone className="w-4 h-4 text-green-700" /></div>
+            <h3 className="font-semibold text-foreground">Log Inbound Call Lead</h3>
+          </div>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+        </div>
+        <div>
+          <label className="text-xs font-medium text-muted-foreground block mb-1">Full Name *</label>
+          <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="Caller's name"
+            className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/30" />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-muted-foreground block mb-1">Phone</label>
+          <input value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} placeholder="+91 xxxxx xxxxx"
+            className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/30" />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-muted-foreground block mb-1">Source</label>
+          <select value={form.source} onChange={e => setForm(p => ({ ...p, source: e.target.value }))}
+            className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/30">
+            {["phone","whatsapp","referral","walk_in","99acres","magicbricks","facebook","google","other"].map(s => (
+              <option key={s} value={s}>{s.replace(/_/g," ").replace(/\b\w/g,l=>l.toUpperCase())}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs font-medium text-muted-foreground block mb-1">Budget (₹)</label>
+          <input type="number" value={form.budget} onChange={e => setForm(p => ({ ...p, budget: e.target.value }))} placeholder="e.g. 5000000"
+            className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/30" />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-muted-foreground block mb-1">Quick Notes</label>
+          <textarea value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} rows={2} placeholder="What did they want?"
+            className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none" />
+        </div>
+        <div className="flex gap-2 pt-1">
+          <button disabled={!form.name || createLead.isPending}
+            onClick={() => createLead.mutate({ data: {
+              name: form.name, email: `${form.name.toLowerCase().replace(/\s+/g,"")}@lead.com`,
+              phone: form.phone || null, source: form.source, status: "new", score: 50,
+              budget: form.budget ? Number(form.budget) : null,
+              notes: form.notes || null, propertyType: null,
+            }})}
+            className="flex-1 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-50">
+            {createLead.isPending ? "Logging…" : "Log Lead"}
+          </button>
+          <button onClick={onClose} className="flex-1 py-2 border border-border rounded-lg text-sm font-medium hover:bg-muted/50 transition-colors">Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── EMPLOYEE DASHBOARD ──────────────────────────────────────────────── */
+const TEAM_FILTERS = ["D1", "D2", "D3", "D4", "D5"];
+
+function getGreeting(name: string) {
+  const h = new Date().getHours();
+  const tod = h < 12 ? "Morning" : h < 17 ? "Afternoon" : "Evening";
+  return `Good ${tod}, ${name.split(" ")[0]}!`;
+}
+
 function EmployeeDashboard({ activity }: {
-  activity: ReturnType<typeof useGetRecentActivity>["data"];
+  activity: ActivityItem[] | undefined;
 }) {
+  const [quickLeadOpen, setQuickLeadOpen] = useState(false);
+  const [teamFilter, setTeamFilter] = useState<string | null>(null);
+  const { profile } = useRole();
   const { data: agents }   = useGetAgents();
   const { data: allLeads } = useGetLeads({}, { query: { queryKey: getGetLeadsQueryKey({}) } });
 
   const me           = agents?.[0];
-  const myLeads      = useMemo(() => (allLeads ?? []).filter(l => l.agentId === me?.id), [allLeads, me]);
+  const myLeads      = useMemo(() => (allLeads ?? []).filter(l => l.assignedTo === me?.id), [allLeads, me]);
   const myConverted  = useMemo(() => myLeads.filter(l => l.status === "closed_won").length, [myLeads]);
-  const myActive     = useMemo(() => myLeads.filter(l => !["closed_won","closed_lost"].includes(l.status)).length, [myLeads]);
-  const myConvRate   = myLeads.length > 0 ? Math.round((myConverted / myLeads.length) * 100) : 0;
   const myPipeline   = useMemo(() => myLeads.filter(l => !["closed_won","closed_lost"].includes(l.status)), [myLeads]);
   const overdueFollowups = useMemo(() => myLeads.filter(l => ["new","contacted"].includes(l.status)).slice(0, 4), [myLeads]);
+
+  const totalCustomers   = myLeads.length;
+  const activeCustomers  = useMemo(() => myLeads.filter(l => ["contacted","qualified","proposal","negotiation"].includes(l.status)).length, [myLeads]);
+  const notActiveCount   = useMemo(() => myLeads.filter(l => l.status === "closed_lost").length, [myLeads]);
+  const activePct        = totalCustomers > 0 ? Math.round((activeCustomers / totalCustomers) * 100) : 0;
+  const pendingCustomers = useMemo(() => myLeads.filter(l => l.status === "new").length, [myLeads]);
+  const pendingPct       = totalCustomers > 0 ? Math.round((pendingCustomers / totalCustomers) * 100) : 0;
 
   const targetLeads = 10, targetConv = 4;
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <KpiCard label="My Leads"        value={String(myLeads.length)} sub={`Target: ${targetLeads}`}  icon={Users}        accent="border-l-blue-500"   trend="+5%" up />
-        <KpiCard label="Conversions"     value={String(myConverted)}    sub={`Target: ${targetConv}`}   icon={CheckCircle2} accent="border-l-green-500"  />
-        <KpiCard label="Active Pipeline" value={String(myActive)}       sub="in progress"               icon={GitBranch}    accent="border-l-amber-500"  />
-        <KpiCard label="Conv. Rate"      value={`${myConvRate}%`}       sub="vs team avg 31%"           icon={Target}       accent="border-l-purple-500" />
+      <QuickLeadDialog open={quickLeadOpen} onClose={() => setQuickLeadOpen(false)} />
+
+      {/* Time-of-day greeting */}
+      <div>
+        <h2 className="text-lg font-bold text-foreground">{getGreeting(profile.name)}</h2>
+        <p className="text-xs text-muted-foreground mt-0.5">Here's your activity summary for today.</p>
+      </div>
+
+      {/* Quick action banner */}
+      <div className="flex items-center justify-between gap-3 bg-green-50 border border-green-200 rounded-xl px-4 py-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <Phone className="w-4 h-4 text-green-700 flex-shrink-0" />
+          <p className="text-sm text-green-800 font-medium">Got an inbound call? Log the lead instantly.</p>
+        </div>
+        <button onClick={() => setQuickLeadOpen(true)}
+          className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors whitespace-nowrap flex-shrink-0">
+          <Plus className="w-3.5 h-3.5" />Quick Add
+        </button>
+      </div>
+
+      {/* 6-card customer KPI grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
+        <KpiCard label="Total Customers"   value={String(totalCustomers)}   sub="all assigned leads"   icon={Users}        accent="border-l-indigo-500" />
+        <KpiCard label="Active Customers"  value={String(activeCustomers)}  sub="in active stages"     icon={CheckCircle2} accent="border-l-green-500"  />
+        <KpiCard label="Not Active"        value={String(notActiveCount)}   sub="closed / lost"        icon={XCircle}      accent="border-l-red-400"    />
+        <KpiCard label="Active %"          value={`${activePct}%`}          sub="of total leads"       icon={TrendingUp}   accent="border-l-blue-500"   />
+        <KpiCard label="Pending Customers" value={String(pendingCustomers)} sub="fresh — no contact"   icon={Clock}        accent="border-l-amber-500"  />
+        <KpiCard label="Pending %"         value={`${pendingPct}%`}         sub="of total leads"       icon={Target}       accent="border-l-orange-500" />
+      </div>
+
+      {/* D1–D5 team segment filters */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Team:</span>
+        {TEAM_FILTERS.map(f => (
+          <button key={f} onClick={() => setTeamFilter(teamFilter === f ? null : f)}
+            className={cn("px-4 py-1.5 text-xs font-bold rounded-full border transition-colors",
+              teamFilter === f
+                ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                : "border-border text-muted-foreground hover:bg-muted/50 hover:border-muted-foreground/30")}>
+            {f}
+          </button>
+        ))}
+        {teamFilter && (
+          <button onClick={() => setTeamFilter(null)} className="text-xs text-primary hover:underline">× Clear</button>
+        )}
       </div>
 
       {/* Targets */}
@@ -918,17 +1226,293 @@ function EmployeeDashboard({ activity }: {
   );
 }
 
+type CFOProperty = { name: string; location: string; type: string; investment: number; expectedRevenue: number; status: "active" | "sold" | "pipeline" };
+const CFO_PROPERTIES_INIT: CFOProperty[] = [
+  { name: "Prestige Lakeside",  location: "Whitefield, Bangalore",   type: "Residential", investment: 4_80_00_000, expectedRevenue: 5_50_00_000, status: "active"   },
+  { name: "Godrej Summit",      location: "Hinjewadi, Pune",          type: "Residential", investment: 8_20_00_000, expectedRevenue: 9_50_00_000, status: "active"   },
+  { name: "DLF Cybercity",      location: "Sector 54, Gurugram",      type: "Commercial",  investment: 6_50_00_000, expectedRevenue: 10_20_00_000, status: "active"  },
+  { name: "Sobha Royal Crest",  location: "Sarjapur Road, Bangalore", type: "Residential", investment: 7_10_00_000, expectedRevenue: 8_80_00_000, status: "pipeline" },
+];
+
 /* ─── CFO DASHBOARD ────────────────────────────────────────────────────── */
 function CFODashboard() {
+  type CFOTab = "cashflow" | "properties";
+  const [tab, setTab] = useState<CFOTab>("cashflow");
+  const [cfoProps, setCfoProps] = useState<CFOProperty[]>(CFO_PROPERTIES_INIT);
+  const [addingProp, setAddingProp] = useState(false);
+  const [editingProp, setEditingProp] = useState<CFOProperty | null>(null);
+  const [propForm, setPropForm] = useState<Partial<CFOProperty>>({});
+
+  function saveProp() {
+    if (!propForm.name || !propForm.investment) return;
+    if (editingProp) {
+      setCfoProps(prev => prev.map(p => p.name === editingProp.name ? { ...editingProp, ...propForm } as CFOProperty : p));
+      setEditingProp(null);
+    } else {
+      setCfoProps(prev => [...prev, { name: propForm.name!, location: propForm.location ?? "—", type: propForm.type ?? "Residential", investment: Number(propForm.investment), expectedRevenue: Number(propForm.expectedRevenue ?? 0), status: "pipeline" }]);
+      setAddingProp(false);
+    }
+    setPropForm({});
+  }
+
+  const CFO_TABS = [
+    { id: "cashflow" as CFOTab, label: "Cash Flow", icon: DollarSign },
+    { id: "properties" as CFOTab, label: "Properties", icon: Building2 },
+  ];
+
   return (
     <div className="space-y-4">
       <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 flex items-start gap-3">
         <ShieldCheck className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
         <p className="text-sm text-blue-800">
-          <span className="font-semibold">CFO View:</span> You have full access to financial data entry and cash flow modules. Navigate to Analytics for P&L reports.
+          <span className="font-semibold">CFO View:</span> Full access to financial data entry, cash flow, and property analysis. Use edit buttons to update records.
         </p>
       </div>
-      <CashFlowTab />
+
+      {/* CFO Tab strip */}
+      <div className="flex gap-0.5 border-b border-border">
+        {CFO_TABS.map(({ id, label, icon: Icon }) => (
+          <button key={id} onClick={() => setTab(id)}
+            className={cn("flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap",
+              tab === id ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground")}>
+            <Icon className="w-3.5 h-3.5" />{label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "cashflow" && <CashFlowTab editable />}
+
+      {tab === "properties" && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-foreground">Property Portfolio Analysis</h2>
+              <p className="text-xs text-muted-foreground">Investment vs expected revenue per property</p>
+            </div>
+            <button onClick={() => { setPropForm({}); setAddingProp(true); }}
+              className="flex items-center gap-1 text-xs px-3 py-1.5 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 transition-opacity">
+              <Plus className="w-3.5 h-3.5" />Add Property
+            </button>
+          </div>
+
+          {/* Summary KPIs */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="bg-card border border-card-border rounded-xl p-4 border-l-4 border-l-blue-500">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Total Investment</p>
+              <p className="text-lg font-bold text-foreground mt-1">{formatCurrency(cfoProps.reduce((s, p) => s + p.investment, 0))}</p>
+            </div>
+            <div className="bg-card border border-card-border rounded-xl p-4 border-l-4 border-l-green-500">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Expected Revenue</p>
+              <p className="text-lg font-bold text-foreground mt-1">{formatCurrency(cfoProps.reduce((s, p) => s + p.expectedRevenue, 0))}</p>
+            </div>
+            <div className="bg-card border border-card-border rounded-xl p-4 border-l-4 border-l-emerald-500 col-span-2 sm:col-span-1">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Expected Profit</p>
+              <p className="text-lg font-bold text-emerald-600 mt-1">{formatCurrency(cfoProps.reduce((s, p) => s + (p.expectedRevenue - p.investment), 0))}</p>
+            </div>
+          </div>
+
+          {/* Properties table */}
+          <div className="bg-card border border-card-border rounded-xl p-4 sm:p-5">
+            <div className="overflow-x-auto -mx-1 px-1">
+              <table className="w-full text-sm" style={{ minWidth: 600 }}>
+                <thead>
+                  <tr className="border-b border-border">
+                    {["Property", "Location", "Type", "Investment", "Expected Rev.", "Profit", "ROI", "Status", ""].map(h => (
+                      <th key={h} className="text-left pb-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider pr-3 whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {cfoProps.map((p) => {
+                    const profit = p.expectedRevenue - p.investment;
+                    const roi = p.investment > 0 ? ((profit / p.investment) * 100).toFixed(1) : "0";
+                    return (
+                      <tr key={p.name} className="hover:bg-muted/20">
+                        <td className="py-2.5 pr-3 font-medium text-foreground text-xs whitespace-nowrap">{p.name}</td>
+                        <td className="py-2.5 pr-3 text-muted-foreground text-xs whitespace-nowrap">{p.location}</td>
+                        <td className="py-2.5 pr-3 text-xs">{p.type}</td>
+                        <td className="py-2.5 pr-3 text-xs whitespace-nowrap">{formatCurrency(p.investment)}</td>
+                        <td className="py-2.5 pr-3 text-xs whitespace-nowrap">{formatCurrency(p.expectedRevenue)}</td>
+                        <td className="py-2.5 pr-3 text-emerald-600 font-semibold text-xs whitespace-nowrap">{formatCurrency(profit)}</td>
+                        <td className="py-2.5 pr-3">
+                          <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-green-50 text-green-700 whitespace-nowrap">{roi}%</span>
+                        </td>
+                        <td className="py-2.5 pr-3">
+                          <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap",
+                            p.status === "active" ? "bg-blue-100 text-blue-700" : p.status === "sold" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700")}>
+                            {p.status}
+                          </span>
+                        </td>
+                        <td className="py-2.5">
+                          <button onClick={() => { setEditingProp(p); setPropForm({ ...p }); }}
+                            className="p-1 rounded hover:bg-blue-50 text-blue-600 transition-colors">
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add/Edit Property Modal */}
+      {(addingProp || editingProp) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-card rounded-xl border border-border shadow-xl w-full max-w-sm p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-foreground">{editingProp ? "Edit Property" : "Add New Property"}</h3>
+              <button onClick={() => { setAddingProp(false); setEditingProp(null); setPropForm({}); }} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+            </div>
+            {([
+              { label: "Property Name *", key: "name", type: "text" },
+              { label: "Location", key: "location", type: "text" },
+              { label: "Type", key: "type", type: "text", placeholder: "Residential / Commercial" },
+              { label: "Investment (₹) *", key: "investment", type: "number" },
+              { label: "Expected Revenue (₹)", key: "expectedRevenue", type: "number" },
+            ] as const).map(({ label, key, type, placeholder }: { label: string; key: string; type: string; placeholder?: string }) => (
+              <div key={key}>
+                <label className="text-xs font-medium text-muted-foreground block mb-1">{label}</label>
+                <input type={type} placeholder={placeholder ?? ""}
+                  value={String((propForm as Record<string, unknown>)[key] ?? "")}
+                  onChange={e => setPropForm(p => ({ ...p, [key]: type === "number" ? Number(e.target.value) : e.target.value }))}
+                  className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/30" />
+              </div>
+            ))}
+            {editingProp && (
+              <div>
+                <label className="text-xs font-medium text-muted-foreground block mb-1">Status</label>
+                <select value={propForm.status ?? editingProp.status}
+                  onChange={e => setPropForm(p => ({ ...p, status: e.target.value as CFOProperty["status"] }))}
+                  className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/30">
+                  <option value="active">Active</option>
+                  <option value="sold">Sold</option>
+                  <option value="pipeline">Pipeline</option>
+                </select>
+              </div>
+            )}
+            <div className="flex gap-2 pt-1">
+              <button onClick={saveProp} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+                {editingProp ? "Save" : "Add"}
+              </button>
+              <button onClick={() => { setAddingProp(false); setEditingProp(null); setPropForm({}); }} className="flex-1 py-2 border border-border rounded-lg text-sm font-medium hover:bg-muted/50 transition-colors">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const BROKER_PERF = [
+  { name: "Vijay Broker",   leads: 14, sold: 5, pending: 9, commission: 3_80_000, lastActivity: "2d ago" },
+  { name: "Anita Kapoor",   leads: 9,  sold: 3, pending: 6, commission: 2_20_000, lastActivity: "1d ago" },
+  { name: "Suresh Reddy",   leads: 6,  sold: 2, pending: 4, commission: 1_50_000, lastActivity: "4d ago" },
+];
+
+/* ─── BROKER DASHBOARD ────────────────────────────────────────────────── */
+function BrokerDashboard({ activity }: { activity: ActivityItem[] | undefined }) {
+  const [quickLeadOpen, setQuickLeadOpen] = useState(false);
+  const { data: allLeads } = useGetLeads({}, { query: { queryKey: getGetLeadsQueryKey({}) } });
+  const brokerLeads = useMemo(() => (allLeads ?? []).filter(l => l.source === "referral" || l.source === "phone"), [allLeads]);
+  const brokerConverted = brokerLeads.filter(l => l.status === "closed_won").length;
+  const brokerPipeline = brokerLeads.filter(l => !["closed_won","closed_lost"].includes(l.status)).length;
+
+  return (
+    <div className="space-y-5">
+      <QuickLeadDialog open={quickLeadOpen} onClose={() => setQuickLeadOpen(false)} />
+
+      {/* Banner */}
+      <div className="flex items-center justify-between gap-3 bg-teal-50 border border-teal-200 rounded-xl px-4 py-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <HandCoins className="w-4 h-4 text-teal-700 flex-shrink-0" />
+          <p className="text-sm text-teal-800 font-medium">Found a client? Add them as a lead or report a property sold.</p>
+        </div>
+        <button onClick={() => setQuickLeadOpen(true)}
+          className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-teal-600 text-white rounded-lg font-semibold hover:bg-teal-700 transition-colors whitespace-nowrap flex-shrink-0">
+          <Plus className="w-3.5 h-3.5" />Add Lead
+        </button>
+      </div>
+
+      {/* KPIs */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <KpiCard label="My Leads"    value={String(brokerLeads.length)} sub="added via referral/phone" icon={Users}       accent="border-l-teal-500"   />
+        <KpiCard label="Sold"        value={String(brokerConverted)}    sub="closed won"               icon={CheckCircle2} accent="border-l-green-500" trend="+2" up />
+        <KpiCard label="In Pipeline" value={String(brokerPipeline)}     sub="active deals"             icon={GitBranch}   accent="border-l-amber-500"  />
+        <KpiCard label="Commission"  value={formatCurrency(brokerConverted * 1_90_000)} sub="est. earned" icon={HandCoins} accent="border-l-purple-500" />
+      </div>
+
+      {/* Broker performance table */}
+      <Card>
+        <SectionTitle icon={BarChart2} title="Broker Performance" sub="All registered brokers — leads sourced and deals closed" />
+        <ScrollTable minWidth={520}>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border">
+                {["Broker","Leads Added","Sold","Pipeline","Est. Commission","Last Active"].map(h => (
+                  <th key={h} className="text-left pb-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider pr-3 whitespace-nowrap">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {BROKER_PERF.map((b) => (
+                <tr key={b.name} className="hover:bg-muted/20">
+                  <td className="py-2.5 pr-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+                        {b.name.split(" ").map(w=>w[0]).join("")}
+                      </div>
+                      <span className="font-medium text-foreground text-xs whitespace-nowrap">{b.name}</span>
+                    </div>
+                  </td>
+                  <td className="py-2.5 pr-3 text-sm">{b.leads}</td>
+                  <td className="py-2.5 pr-3 text-green-600 font-semibold text-sm">{b.sold}</td>
+                  <td className="py-2.5 pr-3 text-amber-600 text-sm">{b.pending}</td>
+                  <td className="py-2.5 pr-3 font-semibold text-xs whitespace-nowrap">{formatCurrency(b.commission)}</td>
+                  <td className="py-2.5 text-muted-foreground text-xs whitespace-nowrap">{b.lastActivity}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </ScrollTable>
+      </Card>
+
+      {/* Active leads */}
+      <Card>
+        <SectionTitle icon={GitBranch} title="My Active Pipeline" sub="Leads in progress"
+          action={<Link href="/leads" className="text-xs text-primary hover:underline flex items-center gap-1 whitespace-nowrap">View all <ChevronRight className="w-3 h-3" /></Link>} />
+        {brokerPipeline === 0 ? (
+          <div className="py-8 text-center text-sm text-muted-foreground">No active leads yet. Add a lead to get started.</div>
+        ) : (
+          <ScrollTable minWidth={380}>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  {["Lead","Status","Budget"].map(h => (
+                    <th key={h} className="text-left pb-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider pr-3">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {brokerLeads.filter(l => !["closed_won","closed_lost"].includes(l.status)).slice(0, 8).map(lead => (
+                  <tr key={lead.id} className="hover:bg-muted/20 cursor-pointer" onClick={() => window.location.href = `/leads/${lead.id}`}>
+                    <td className="py-2.5 pr-3 font-medium text-foreground text-xs whitespace-nowrap">{lead.name}</td>
+                    <td className="py-2.5 pr-3">
+                      <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-medium", statusColor(lead.status))}>
+                        {stageLabel(lead.status)}
+                      </span>
+                    </td>
+                    <td className="py-2.5 text-xs font-medium whitespace-nowrap">{lead.budget ? formatCurrency(lead.budget) : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </ScrollTable>
+        )}
+      </Card>
     </div>
   );
 }
@@ -955,20 +1539,25 @@ export default function DashboardPage() {
   const isOwnerOrManager = role === "owner" || role === "manager";
   const isCFO            = role === "cfo";
   const isEmployee       = role === "sales" || role === "employee";
+  const isBroker         = role === "broker";
+
+  const headerTitle = isOwnerOrManager ? "Owner & Manager Dashboard"
+    : isCFO ? "Finance Dashboard"
+    : isBroker ? "Broker Dashboard"
+    : "My Dashboard";
+
+  const headerSub = isOwnerOrManager ? "Full business view — inventory, finances, leads, and team performance"
+    : isCFO ? "Financial data, cash flow, and property analysis"
+    : isBroker ? "Your leads, deals, broker performance, and commission tracker"
+    : "Your personal pipeline, targets, and follow-ups";
 
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-xl sm:text-2xl font-bold text-foreground leading-tight">
-            {isOwnerOrManager ? "Owner & Manager Dashboard" : isCFO ? "Finance Dashboard" : "My Dashboard"}
-          </h1>
-          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-            {isOwnerOrManager ? "Full business view — inventory, finances, leads, and team performance"
-              : isCFO ? "Financial data, cash flow, and project economics"
-              : "Your personal pipeline, targets, and follow-ups"}
-          </p>
+          <h1 className="text-xl sm:text-2xl font-bold text-foreground leading-tight">{headerTitle}</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">{headerSub}</p>
         </div>
         <div className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-semibold text-white flex-shrink-0 whitespace-nowrap", profile.color)}>
           <ShieldCheck className="w-3 h-3" />
@@ -1002,8 +1591,9 @@ export default function DashboardPage() {
       {isOwnerOrManager && tab === "cashflow"  && <CashFlowTab />}
       {isOwnerOrManager && tab === "leads"     && <LeadManagementTab stats={stats} sources={sources} pipeline={pipeline} activity={activity} />}
       {isOwnerOrManager && tab === "analysis"  && <AnalysisTab />}
-      {isCFO     && <CFODashboard />}
+      {isCFO      && <CFODashboard />}
       {isEmployee && <EmployeeDashboard activity={activity} />}
+      {isBroker   && <BrokerDashboard activity={activity} />}
     </div>
   );
 }

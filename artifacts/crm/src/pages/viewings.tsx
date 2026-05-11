@@ -1,5 +1,8 @@
 import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useGetLeads, useGetProperties, useGetAgents, getGetLeadsQueryKey, getGetPropertiesQueryKey, getGetAgentsQueryKey } from "@workspace/api-client-react";
+import { customFetch } from "@workspace/api-client-react";
+import { viewingKeys } from "@/lib/queryKeys";
 import { Calendar, Clock, MapPin, User, Plus, CheckCircle2, XCircle, HelpCircle, Trash2, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,15 +11,20 @@ import { cn, formatCurrency } from "@/lib/utils";
 
 type Status = "confirmed" | "pending" | "completed" | "no_show" | "cancelled";
 
-type Viewing = {
+type ViewingRecord = {
   id: number;
-  leadId: number;
-  propertyId: number;
-  agentId: number;
+  leadId: number | null;
+  propertyId: number | null;
+  agentId: number | null;
   date: string;
   time: string;
   status: Status;
-  notes?: string;
+  notes?: string | null;
+  leadName?: string | null;
+  leadPhone?: string | null;
+  propertyTitle?: string | null;
+  propertyPrice?: number | null;
+  agentName?: string | null;
 };
 
 const STATUS_CONFIG: Record<Status, { label: string; color: string; icon: typeof CheckCircle2 }> = {
@@ -27,53 +35,93 @@ const STATUS_CONFIG: Record<Status, { label: string; color: string; icon: typeof
   cancelled:  { label: "Cancelled",  color: "text-slate-600 bg-slate-50 border-slate-200",    icon: XCircle },
 };
 
-const SEED_VIEWINGS: Viewing[] = [
-  { id: 1, leadId: 1, propertyId: 1, agentId: 1, date: "2026-05-07", time: "10:00", status: "confirmed" },
-  { id: 2, leadId: 2, propertyId: 2, agentId: 2, date: "2026-05-07", time: "14:30", status: "pending" },
-  { id: 3, leadId: 3, propertyId: 3, agentId: 3, date: "2026-05-08", time: "11:00", status: "confirmed" },
-  { id: 4, leadId: 4, propertyId: 1, agentId: 1, date: "2026-05-09", time: "16:00", status: "pending" },
-  { id: 5, leadId: 5, propertyId: 4, agentId: 4, date: "2026-05-05", time: "09:30", status: "completed", notes: "Showed 3-bed unit. Lead very interested, wants to discuss financing." },
-  { id: 6, leadId: 6, propertyId: 2, agentId: 2, date: "2026-05-04", time: "15:00", status: "no_show", notes: "Called twice, no response." },
-];
+function useViewings() {
+  return useQuery({
+    queryKey: viewingKeys.all(),
+    queryFn: () => customFetch<ViewingRecord[]>("/api/viewings"),
+  });
+}
+
+function useCreateViewing() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Partial<ViewingRecord>) =>
+      customFetch<ViewingRecord>("/api/viewings", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: viewingKeys.all() }),
+  });
+}
+
+function useUpdateViewing() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<ViewingRecord> }) =>
+      customFetch<ViewingRecord>(`/api/viewings/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: viewingKeys.all() }),
+  });
+}
+
+function useDeleteViewing() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) =>
+      customFetch<void>(`/api/viewings/${id}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: viewingKeys.all() }),
+  });
+}
 
 export default function ViewingsPage() {
   const { toast } = useToast();
-  const [viewings, setViewings] = useState<Viewing[]>(SEED_VIEWINGS);
   const [showAdd, setShowAdd] = useState(false);
   const [filterStatus, setFilterStatus] = useState<Status | "all">("all");
   const [newViewing, setNewViewing] = useState({ leadId: "", propertyId: "", agentId: "", date: "", time: "10:00", notes: "" });
 
+  const { data: viewings = [], isLoading } = useViewings();
   const { data: leads } = useGetLeads({}, { query: { queryKey: getGetLeadsQueryKey() } });
   const { data: properties } = useGetProperties({}, { query: { queryKey: getGetPropertiesQueryKey() } });
   const { data: agents } = useGetAgents({ query: { queryKey: getGetAgentsQueryKey() } });
 
+  const createViewing = useCreateViewing();
+  const updateViewing = useUpdateViewing();
+  const deleteViewing = useDeleteViewing();
+
   function addViewing() {
     if (!newViewing.leadId || !newViewing.propertyId || !newViewing.date) {
-      toast({ title: "Please fill in lead, property, and date", variant: "destructive" }); return;
+      toast({ title: "Please fill in lead, property, and date", variant: "destructive" });
+      return;
     }
-    setViewings((prev) => [
-      ...prev,
+    createViewing.mutate(
       {
-        id: Date.now(), status: "pending",
         leadId: parseInt(newViewing.leadId),
         propertyId: parseInt(newViewing.propertyId),
-        agentId: parseInt(newViewing.agentId) || (agents?.[0]?.id ?? 1),
-        date: newViewing.date, time: newViewing.time, notes: newViewing.notes,
+        agentId: newViewing.agentId ? parseInt(newViewing.agentId) : null,
+        date: newViewing.date,
+        time: newViewing.time,
+        notes: newViewing.notes || null,
+        status: "pending",
       },
-    ]);
-    setNewViewing({ leadId: "", propertyId: "", agentId: "", date: "", time: "10:00", notes: "" });
-    setShowAdd(false);
-    toast({ title: "Viewing scheduled ✓" });
+      {
+        onSuccess: () => {
+          setNewViewing({ leadId: "", propertyId: "", agentId: "", date: "", time: "10:00", notes: "" });
+          setShowAdd(false);
+          toast({ title: "Viewing scheduled" });
+        },
+        onError: () => toast({ title: "Failed to schedule viewing", variant: "destructive" }),
+      }
+    );
   }
 
   function changeStatus(id: number, status: Status) {
-    setViewings((prev) => prev.map((v) => v.id === id ? { ...v, status } : v));
-    toast({ title: `Viewing marked as ${STATUS_CONFIG[status].label}` });
+    updateViewing.mutate(
+      { id, data: { status } },
+      { onSuccess: () => toast({ title: `Viewing marked as ${STATUS_CONFIG[status].label}` }) }
+    );
   }
 
-  function deleteViewing(id: number) {
-    setViewings((prev) => prev.filter((v) => v.id !== id));
-    toast({ title: "Viewing removed" });
+  function handleDelete(id: number) {
+    deleteViewing.mutate(id, {
+      onSuccess: () => toast({ title: "Viewing removed" }),
+      onError: () => toast({ title: "Failed to delete viewing", variant: "destructive" }),
+    });
   }
 
   const filtered = viewings.filter((v) => filterStatus === "all" || v.status === filterStatus);
@@ -153,7 +201,9 @@ export default function ViewingsPage() {
           </div>
           <div className="flex justify-end gap-2">
             <Button variant="outline" size="sm" onClick={() => setShowAdd(false)}>Cancel</Button>
-            <Button size="sm" onClick={addViewing}>Confirm Viewing</Button>
+            <Button size="sm" onClick={addViewing} disabled={createViewing.isPending}>
+              {createViewing.isPending ? "Scheduling..." : "Confirm Viewing"}
+            </Button>
           </div>
         </div>
       )}
@@ -175,74 +225,84 @@ export default function ViewingsPage() {
       </div>
 
       {/* Viewings list */}
-      <div className="space-y-3">
-        {filtered.length === 0 && (
-          <div className="bg-card border border-card-border rounded-lg p-10 text-center text-muted-foreground text-sm">
-            No viewings match the current filter
-          </div>
-        )}
-        {filtered.map((v) => {
-          const lead = (leads ?? []).find((l) => l.id === v.leadId);
-          const property = (properties ?? []).find((p) => p.id === v.propertyId);
-          const agent = (agents ?? []).find((a) => a.id === v.agentId);
-          const cfg = STATUS_CONFIG[v.status];
-          const Icon = cfg.icon;
-          const isUpcoming = v.status === "pending" || v.status === "confirmed";
+      {isLoading ? (
+        <div className="space-y-3">
+          {[...Array(3)].map((_, i) => <div key={i} className="h-24 bg-muted rounded-lg animate-pulse" />)}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filtered.length === 0 && (
+            <div className="bg-card border border-card-border rounded-lg p-10 text-center text-muted-foreground text-sm">
+              No viewings match the current filter
+            </div>
+          )}
+          {filtered.map((v) => {
+            const cfg = STATUS_CONFIG[v.status as Status] ?? STATUS_CONFIG.pending;
+            const Icon = cfg.icon;
+            const isUpcoming = v.status === "pending" || v.status === "confirmed";
 
-          return (
-            <div key={v.id} className="bg-card border border-card-border rounded-lg p-4">
-              <div className="flex items-start gap-4 flex-wrap">
-                {/* Date block */}
-                <div className="flex-shrink-0 bg-primary/5 border border-primary/20 rounded-lg px-4 py-3 text-center min-w-[64px]">
-                  <p className="text-xs font-medium text-primary">
-                    {new Date(v.date).toLocaleDateString("en-IN", { month: "short" }).toUpperCase()}
-                  </p>
-                  <p className="text-2xl font-bold text-primary leading-none">
-                    {new Date(v.date).getDate()}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {new Date(v.date).toLocaleDateString("en-IN", { weekday: "short" })}
-                  </p>
-                </div>
-
-                {/* Details */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap mb-1">
-                    <h3 className="font-semibold text-foreground">{lead?.name ?? "Unknown Lead"}</h3>
-                    <span className={cn("flex items-center gap-1 text-xs font-medium border px-2 py-0.5 rounded-full", cfg.color)}>
-                      <Icon className="w-3 h-3" />{cfg.label}
-                    </span>
+            return (
+              <div key={v.id} className="bg-card border border-card-border rounded-lg p-4">
+                <div className="flex items-start gap-4 flex-wrap">
+                  {/* Date block */}
+                  <div className="flex-shrink-0 bg-primary/5 border border-primary/20 rounded-lg px-4 py-3 text-center min-w-[64px]">
+                    <p className="text-xs font-medium text-primary">
+                      {new Date(v.date).toLocaleDateString("en-IN", { month: "short" }).toUpperCase()}
+                    </p>
+                    <p className="text-2xl font-bold text-primary leading-none">
+                      {new Date(v.date).getDate()}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {new Date(v.date).toLocaleDateString("en-IN", { weekday: "short" })}
+                    </p>
                   </div>
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{property?.title ?? "Unknown Property"}{property && ` · ${formatCurrency(property.price)}`}</span>
-                    <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{v.time}</span>
-                    {agent && <span className="flex items-center gap-1"><User className="w-3 h-3" />{agent.name}</span>}
-                    {lead?.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{lead.phone}</span>}
-                  </div>
-                  {v.notes && <p className="text-xs text-muted-foreground mt-1.5 italic">"{v.notes}"</p>}
-                </div>
 
-                {/* Actions */}
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  {isUpcoming && (
-                    <>
-                      <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-green-700 border-green-200 hover:bg-green-50" onClick={() => changeStatus(v.id, "completed")}>
-                        <CheckCircle2 className="w-3 h-3" />Done
-                      </Button>
-                      <Button size="sm" variant="outline" className="h-7 text-xs text-red-600 border-red-200 hover:bg-red-50" onClick={() => changeStatus(v.id, "no_show")}>
-                        No Show
-                      </Button>
-                    </>
-                  )}
-                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" onClick={() => deleteViewing(v.id)}>
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </Button>
+                  {/* Details */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <h3 className="font-semibold text-foreground">{v.leadName ?? "Unknown Lead"}</h3>
+                      <span className={cn("flex items-center gap-1 text-xs font-medium border px-2 py-0.5 rounded-full", cfg.color)}>
+                        <Icon className="w-3 h-3" />{cfg.label}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <MapPin className="w-3 h-3" />
+                        {v.propertyTitle ?? "Unknown Property"}
+                        {v.propertyPrice != null && ` · ${formatCurrency(v.propertyPrice)}`}
+                      </span>
+                      <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{v.time}</span>
+                      {v.agentName && <span className="flex items-center gap-1"><User className="w-3 h-3" />{v.agentName}</span>}
+                      {v.leadPhone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{v.leadPhone}</span>}
+                    </div>
+                    {v.notes && <p className="text-xs text-muted-foreground mt-1.5 italic">"{v.notes}"</p>}
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {isUpcoming && (
+                      <>
+                        <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-green-700 border-green-200 hover:bg-green-50"
+                          onClick={() => changeStatus(v.id, "completed")}>
+                          <CheckCircle2 className="w-3 h-3" />Done
+                        </Button>
+                        <Button size="sm" variant="outline" className="h-7 text-xs text-red-600 border-red-200 hover:bg-red-50"
+                          onClick={() => changeStatus(v.id, "no_show")}>
+                          No Show
+                        </Button>
+                      </>
+                    )}
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                      onClick={() => { if (confirm("Delete this viewing?")) handleDelete(v.id); }}>
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

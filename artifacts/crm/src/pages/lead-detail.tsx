@@ -31,17 +31,18 @@ type FormValues = z.infer<typeof editSchema>;
 
 export default function LeadDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const numId = parseInt(id ?? "", 10);
   const [, setLocation] = useLocation();
   const qc = useQueryClient();
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
 
-  const { data: lead, isLoading } = useGetLead(Number(id), { query: { queryKey: getGetLeadQueryKey(Number(id)) } });
+  const { data: lead, isLoading } = useGetLead(numId, { query: { queryKey: getGetLeadQueryKey(numId), enabled: !isNaN(numId) } });
   const { data: agents } = useGetAgents();
   const updateLead = useUpdateLead({
     mutation: {
       onSuccess: () => {
-        qc.invalidateQueries({ queryKey: getGetLeadQueryKey(Number(id)) });
+        qc.invalidateQueries({ queryKey: getGetLeadQueryKey(numId) });
         qc.invalidateQueries({ queryKey: getGetLeadsQueryKey() });
         setEditing(false);
         toast({ title: "Lead updated" });
@@ -63,11 +64,12 @@ export default function LeadDetailPage() {
     }
   }, [lead, form]);
 
+  if (isNaN(numId)) return <div className="p-6 text-muted-foreground">Invalid lead ID</div>;
   if (isLoading) return <div className="p-6"><div className="h-8 w-48 bg-muted rounded animate-pulse" /></div>;
   if (!lead) return <div className="p-6 text-muted-foreground">Lead not found</div>;
 
   function onSubmit(values: FormValues) {
-    updateLead.mutate({ id: Number(id), data: { ...values, budget: values.budget ?? null, propertyType: values.propertyType ?? null, notes: values.notes ?? null, assignedTo: values.assignedTo ?? null } });
+    updateLead.mutate({ id: numId, data: { ...values, budget: values.budget ?? null, propertyType: values.propertyType ?? null, notes: values.notes ?? null, assignedTo: values.assignedTo ?? null } });
   }
 
   return (

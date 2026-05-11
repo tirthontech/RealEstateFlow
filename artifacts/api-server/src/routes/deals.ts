@@ -64,6 +64,7 @@ router.post("/deals", async (req, res): Promise<void> => {
   }
   const [deal] = await db.insert(dealsTable).values({
     ...parsed.data,
+    value: String(parsed.data.value),
     stage: parsed.data.stage ?? "prospect",
     closingDate: parsed.data.closingDate ? new Date(parsed.data.closingDate as unknown as string) : null,
   }).returning();

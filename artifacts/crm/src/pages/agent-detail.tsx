@@ -24,16 +24,17 @@ type FormValues = z.infer<typeof editSchema>;
 
 export default function AgentDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const numId = parseInt(id ?? "", 10);
   const [, setLocation] = useLocation();
   const qc = useQueryClient();
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
 
-  const { data: agent, isLoading } = useGetAgent(Number(id), { query: { queryKey: getGetAgentQueryKey(Number(id)) } });
+  const { data: agent, isLoading } = useGetAgent(numId, { query: { queryKey: getGetAgentQueryKey(numId), enabled: !isNaN(numId) } });
   const updateAgent = useUpdateAgent({
     mutation: {
       onSuccess: () => {
-        qc.invalidateQueries({ queryKey: getGetAgentQueryKey(Number(id)) });
+        qc.invalidateQueries({ queryKey: getGetAgentQueryKey(numId) });
         qc.invalidateQueries({ queryKey: getGetAgentsQueryKey() });
         setEditing(false);
         toast({ title: "Agent updated" });
@@ -50,11 +51,12 @@ export default function AgentDetailPage() {
     }
   }, [agent, form]);
 
+  if (isNaN(numId)) return <div className="p-6 text-muted-foreground">Invalid agent ID</div>;
   if (isLoading) return <div className="p-6"><div className="h-8 w-48 bg-muted rounded animate-pulse" /></div>;
   if (!agent) return <div className="p-6 text-muted-foreground">Agent not found</div>;
 
   function onSubmit(values: FormValues) {
-    updateAgent.mutate({ id: Number(id), data: { ...values, phone: values.phone ?? null, market: values.market ?? null } });
+    updateAgent.mutate({ id: numId, data: { ...values, phone: values.phone ?? null, market: values.market ?? null } });
   }
 
   return (
