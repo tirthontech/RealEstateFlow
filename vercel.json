@@ -1,4 +1,7 @@
 {
+  "installCommand": "npm i -g pnpm && pnpm install",
+  "buildCommand": "cd artifacts/crm && pnpm build",
+  "outputDirectory": "artifacts/crm/dist/public",
   "rewrites": [
     {
       "source": "/api/:path*",
