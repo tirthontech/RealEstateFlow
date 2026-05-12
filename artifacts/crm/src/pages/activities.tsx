@@ -3,7 +3,7 @@ import { useGetLeads, useGetAgents, getGetLeadsQueryKey } from "@workspace/api-c
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Phone, Home, TrendingUp, CheckCircle2, Clock, Search, Plus, Download,
-  Calendar, MessageSquare, ChevronRight, X, Filter, ArrowUpDown, MessageCircle,
+  Calendar, MessageSquare, ChevronRight, X, ArrowUpDown, MessageCircle,
 } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { useRole } from "@/lib/role-context";
@@ -264,17 +264,47 @@ function RemarkCell({ activity, onUpdate }: { activity: Activity; onUpdate: (id:
   );
 }
 
-/* ─── Mark Done Button ───────────────────────────────────────────────── */
+/* ─── Status Dropdown ────────────────────────────────────────────────── */
+const STATUS_OPTIONS: { value: ActivityStatus; label: string; color: string }[] = [
+  { value: "pending",   label: "Pending",     color: "bg-amber-100 text-amber-700 border-amber-200" },
+  { value: "completed", label: "Done",        color: "bg-green-100 text-green-700 border-green-200" },
+  { value: "cancelled", label: "Cancelled",   color: "bg-red-100 text-red-600 border-red-200" },
+];
+
 function StatusToggle({ activity, onUpdate }: { activity: Activity; onUpdate: (id: number, remark: string, status: ActivityStatus) => void }) {
-  return activity.status === "completed" ? (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-100 text-green-700 whitespace-nowrap">
-      <CheckCircle2 className="w-2.5 h-2.5" />Done
-    </span>
-  ) : (
-    <button onClick={() => onUpdate(activity.id, activity.lastRemark, "completed")}
-      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700 hover:bg-green-100 hover:text-green-700 transition-colors whitespace-nowrap border border-amber-200">
-      <Clock className="w-2.5 h-2.5" />Pending
-    </button>
+  const [open, setOpen] = useState(false);
+  const current = STATUS_OPTIONS.find(s => s.value === activity.status) ?? STATUS_OPTIONS[0];
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border whitespace-nowrap transition-colors hover:opacity-80", current.color)}
+      >
+        {activity.status === "completed" ? <CheckCircle2 className="w-2.5 h-2.5" /> : activity.status === "cancelled" ? <X className="w-2.5 h-2.5" /> : <Clock className="w-2.5 h-2.5" />}
+        {current.label}
+        <ChevronRight className="w-2.5 h-2.5 rotate-90 -mr-0.5" />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 z-50 mt-1 bg-card border border-border rounded-lg shadow-xl overflow-hidden min-w-[110px]">
+            {STATUS_OPTIONS.map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => { onUpdate(activity.id, activity.lastRemark, opt.value); setOpen(false); }}
+                className={cn("w-full flex items-center gap-2 px-3 py-2 text-[11px] font-medium hover:bg-muted/50 transition-colors text-left",
+                  activity.status === opt.value && "bg-muted/40")}
+              >
+                <span className={cn("w-2 h-2 rounded-full flex-shrink-0",
+                  opt.value === "completed" ? "bg-green-500" : opt.value === "cancelled" ? "bg-red-400" : "bg-amber-400")} />
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -330,7 +360,9 @@ export default function ActivitiesPage() {
   function updateActivity(id: number, remark: string, status: ActivityStatus) {
     const act = activities.find(a => a.id === id);
     setActivities(prev => prev.map(a => a.id === id ? { ...a, lastRemark: remark, status } : a));
-    if (status === "completed") {
+    if (status === "cancelled") {
+      toast({ title: "Activity cancelled" });
+    } else if (status === "completed") {
       if (canSendWhatsApp && act?.activityType === "phone") {
         toast({
           title: `Call with ${act.customer} completed`,
