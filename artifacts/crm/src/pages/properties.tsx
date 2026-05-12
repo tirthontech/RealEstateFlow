@@ -3,19 +3,90 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import {
   useGetProperties, useCreateProperty, useDeleteProperty,
-  getGetPropertiesQueryKey, getGetDashboardStatsQueryKey, useGetAgents
+  useGetLeads,
+  getGetPropertiesQueryKey, getGetDashboardStatsQueryKey, getGetLeadsQueryKey, useGetAgents
 } from "@workspace/api-client-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, Search, Trash2, ExternalLink, BedDouble, Bath, Maximize2 } from "lucide-react";
+import { Plus, Search, Trash2, BedDouble, Bath, Maximize2, Calendar, Phone, MapPin, Info, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { statusColor, stageLabel, formatCurrency, formatDate, PROPERTY_TYPES, PROPERTY_STATUSES } from "@/lib/utils";
+import { useRole } from "@/lib/role-context";
+import { statusColor, stageLabel, formatCurrency, formatDate, PROPERTY_TYPES, PROPERTY_STATUSES, cn } from "@/lib/utils";
+
+/* ─── Site Visit Dialog (salesperson only) ──────────────────────────── */
+function SiteVisitDialog({ propertyTitle, open, onClose }: {
+  propertyTitle: string; open: boolean; onClose: () => void;
+}) {
+  const { data: leads } = useGetLeads({}, { query: { queryKey: getGetLeadsQueryKey({}) } });
+  const { toast } = useToast();
+  const [leadId, setLeadId] = useState("");
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [time, setTime] = useState("10:00");
+  const [note, setNote] = useState("");
+
+  function handleBook() {
+    const lead = (leads ?? []).find(l => String(l.id) === leadId);
+    toast({ title: `Site visit booked for ${lead?.name ?? "lead"} at ${propertyTitle} on ${date}` });
+    onClose();
+  }
+
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+      <div className="bg-card rounded-xl border border-border shadow-xl w-full max-w-sm p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-foreground flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-primary" /> Book Site Visit
+          </h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+        </div>
+        <p className="text-xs text-muted-foreground">Property: <span className="font-semibold text-foreground">{propertyTitle}</span></p>
+
+        <div>
+          <label className="text-xs font-medium text-muted-foreground block mb-1">Select Lead *</label>
+          <select value={leadId} onChange={e => setLeadId(e.target.value)}
+            className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/30">
+            <option value="">— choose a lead —</option>
+            {(leads ?? []).map(l => <option key={l.id} value={String(l.id)}>{l.name} · {l.phone ?? l.email}</option>)}
+          </select>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs font-medium text-muted-foreground block mb-1">Date</label>
+            <input type="date" value={date} onChange={e => setDate(e.target.value)}
+              className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/30" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground block mb-1">Time</label>
+            <input type="time" value={time} onChange={e => setTime(e.target.value)}
+              className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/30" />
+          </div>
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-muted-foreground block mb-1">Note</label>
+          <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} placeholder="Any special instructions..."
+            className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none" />
+        </div>
+
+        <div className="flex gap-2 pt-1">
+          <button disabled={!leadId} onClick={handleBook}
+            className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50">
+            Confirm Visit
+          </button>
+          <button onClick={onClose} className="flex-1 py-2 border border-border rounded-lg text-sm font-medium hover:bg-muted/50 transition-colors">Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const createPropertySchema = z.object({
   title: z.string().min(1, "Title is required"),
@@ -38,8 +109,12 @@ export default function PropertiesPage() {
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [showCreate, setShowCreate] = useState(false);
+  const [siteVisitProp, setSiteVisitProp] = useState<{ id: number; title: string } | null>(null);
+  const [infoCard, setInfoCard] = useState<number | null>(null);
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { role } = useRole();
+  const isSales = role === "sales";
   const [, setLocation] = useLocation();
 
   const params = {
@@ -85,14 +160,26 @@ export default function PropertiesPage() {
 
   return (
     <div className="p-6 space-y-5">
+      {siteVisitProp && (
+        <SiteVisitDialog
+          propertyTitle={siteVisitProp.title}
+          open={!!siteVisitProp}
+          onClose={() => setSiteVisitProp(null)}
+        />
+      )}
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Properties</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{filtered.length} listings</p>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {isSales ? `${filtered.length} available properties — view details and book site visits` : `${filtered.length} listings`}
+          </p>
         </div>
-        <Button data-testid="button-create-property" onClick={() => setShowCreate(true)} className="gap-2">
-          <Plus className="w-4 h-4" /> Add Property
-        </Button>
+        {!isSales && (
+          <Button data-testid="button-create-property" onClick={() => setShowCreate(true)} className="gap-2">
+            <Plus className="w-4 h-4" /> Add Property
+          </Button>
+        )}
       </div>
 
       <div className="flex gap-3 flex-wrap">
@@ -128,35 +215,74 @@ export default function PropertiesPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtered.map((prop) => (
             <div key={prop.id} data-testid={`card-property-${prop.id}`}
-              className="bg-card border border-card-border rounded-lg p-5 cursor-pointer hover:border-primary/40 transition-colors"
-              onClick={() => setLocation(`/properties/${prop.id}`)}>
-              <div className="flex items-start justify-between mb-3">
+              className="bg-card border border-card-border rounded-lg p-5 hover:border-primary/40 transition-colors flex flex-col gap-3"
+              onClick={() => !isSales && setLocation(`/properties/${prop.id}`)}
+              style={{ cursor: isSales ? "default" : "pointer" }}>
+
+              {/* Header */}
+              <div className="flex items-start justify-between">
                 <div className="flex-1 min-w-0">
                   <h3 className="font-semibold text-foreground text-sm truncate">{prop.title}</h3>
-                  <p className="text-xs text-muted-foreground mt-0.5 truncate">{prop.address}, {prop.city}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5 truncate flex items-center gap-1">
+                    <MapPin className="w-3 h-3 flex-shrink-0" />{prop.address}, {prop.city}
+                  </p>
                 </div>
-                <Button size="icon" variant="ghost" className="h-7 w-7 flex-shrink-0 text-destructive hover:text-destructive ml-2"
-                  data-testid={`button-delete-property-${prop.id}`}
-                  onClick={(e) => { e.stopPropagation(); if (confirm("Delete?")) deleteProperty.mutate({ id: prop.id }); }}>
-                  <Trash2 className="w-3.5 h-3.5" />
-                </Button>
+                {!isSales && (
+                  <Button size="icon" variant="ghost" className="h-7 w-7 flex-shrink-0 text-destructive hover:text-destructive ml-2"
+                    data-testid={`button-delete-property-${prop.id}`}
+                    onClick={(e) => { e.stopPropagation(); if (confirm("Delete?")) deleteProperty.mutate({ id: prop.id }); }}>
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                )}
               </div>
-              <p className="text-xl font-bold text-primary mb-3">{formatCurrency(prop.price)}</p>
-              <div className="flex items-center gap-4 text-xs text-muted-foreground mb-3">
+
+              {/* Price */}
+              <p className="text-xl font-bold text-primary">{formatCurrency(prop.price)}</p>
+
+              {/* Specs */}
+              <div className="flex items-center gap-4 text-xs text-muted-foreground">
                 {prop.bedrooms != null && <span className="flex items-center gap-1"><BedDouble className="w-3.5 h-3.5" />{prop.bedrooms} bd</span>}
                 {prop.bathrooms != null && <span className="flex items-center gap-1"><Bath className="w-3.5 h-3.5" />{prop.bathrooms} ba</span>}
                 {prop.areaSqft != null && <span className="flex items-center gap-1"><Maximize2 className="w-3.5 h-3.5" />{Number(prop.areaSqft).toLocaleString()} sqft</span>}
               </div>
+
+              {/* Status + type */}
               <div className="flex items-center justify-between">
                 <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${statusColor(prop.status)}`}>{stageLabel(prop.status)}</span>
                 <span className="text-xs text-muted-foreground capitalize">{prop.type}</span>
               </div>
+
+              {/* Description expandable (salesperson info panel) */}
+              {isSales && infoCard === prop.id && prop.description && (
+                <div className="rounded-lg bg-muted/50 border border-border px-3 py-2 text-xs text-muted-foreground leading-relaxed">
+                  {prop.description}
+                </div>
+              )}
+
+              {/* Salesperson actions */}
+              {isSales && (
+                <div className="flex gap-2 pt-1 border-t border-border" onClick={e => e.stopPropagation()}>
+                  <button
+                    onClick={() => setSiteVisitProp({ id: prop.id, title: prop.title })}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:opacity-90 transition-opacity">
+                    <Calendar className="w-3.5 h-3.5" /> Book Site Visit
+                  </button>
+                  {prop.description && (
+                    <button
+                      onClick={() => setInfoCard(infoCard === prop.id ? null : prop.id)}
+                      className={cn("flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors",
+                        infoCard === prop.id ? "bg-primary/10 text-primary border-primary/30" : "border-border text-muted-foreground hover:border-primary/40")}>
+                      <Info className="w-3.5 h-3.5" /> Info
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </div>
       )}
 
-      <Dialog open={showCreate} onOpenChange={setShowCreate}>
+      <Dialog open={!isSales && showCreate} onOpenChange={setShowCreate}>
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>Add Property</DialogTitle></DialogHeader>
           <Form {...form}>
