@@ -1538,7 +1538,7 @@ export default function DashboardPage() {
 
   const isOwnerOrManager = role === "owner" || role === "manager";
   const isCFO            = role === "cfo";
-  const isEmployee       = role === "sales" || role === "employee";
+  const isEmployee       = role === "sales";
   const isBroker         = role === "broker";
 
   const headerTitle = isOwnerOrManager ? "Owner & Manager Dashboard"

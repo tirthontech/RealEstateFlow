@@ -1,13 +1,12 @@
 import { createContext, useContext, useState, useMemo, useCallback } from "react";
 
-export type UserRole = "owner" | "cfo" | "manager" | "sales" | "employee" | "broker";
+export type UserRole = "owner" | "cfo" | "manager" | "sales" | "broker";
 
 export const ROLE_PROFILES: { value: UserRole; label: string; description: string; avatar: string; name: string; color: string }[] = [
   { value: "owner",    label: "Owner / Promoter", description: "Full platform access, all approvals", avatar: "HJ", name: "Harsh Jain",   color: "bg-amber-500"  },
   { value: "cfo",      label: "CFO / Finance",    description: "Finance data entry and visibility",   avatar: "RK", name: "Rakesh Kumar", color: "bg-blue-600"   },
   { value: "manager",  label: "Manager",           description: "Team oversight, approval authority",  avatar: "SJ", name: "Sneha Joshi",  color: "bg-green-600"  },
   { value: "sales",    label: "Salesperson",       description: "Lead management, data entry",         avatar: "RS", name: "Riya Sharma",  color: "bg-purple-600" },
-  { value: "employee", label: "Employee",          description: "Limited access, view only",           avatar: "AM", name: "Arjun Mehta",  color: "bg-slate-500"  },
   { value: "broker",   label: "Broker / Agent",    description: "External broker — leads and deals",   avatar: "VB", name: "Vijay Broker", color: "bg-teal-600"   },
 ];
 
@@ -15,8 +14,7 @@ export const ROLE_NAV_ACCESS: Record<UserRole, string[]> = {
   owner:    ["dashboard", "leads", "properties", "deals", "agents", "viewings", "whatsapp", "analytics", "commission", "integrations", "settings", "approvals", "activities"],
   cfo:      ["dashboard", "analytics", "commission", "settings"],
   manager:  ["dashboard", "leads", "properties", "deals", "agents", "viewings", "whatsapp", "analytics", "commission", "settings", "approvals", "activities"],
-  sales:    ["dashboard", "leads", "properties", "viewings", "commission", "activities"],
-  employee: ["dashboard", "leads", "activities"],
+  sales:    ["dashboard", "activities"],
   broker:   ["dashboard", "leads", "properties", "commission", "activities"],
 };
 

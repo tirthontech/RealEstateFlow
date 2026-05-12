@@ -38,6 +38,12 @@ const TEMPLATES = [
     icon: "📄",
     body: `Hi {{name}},\n\nThank you for your interest in {{property}}.\n\nTo proceed with your booking, we'll need the following documents:\n• PAN Card\n• Aadhaar Card\n• Bank Statement (3 months)\n• IT Returns (2 years)\n\nPlease share at your earliest convenience.`,
   },
+  {
+    id: "call_welcome",
+    label: "Post-Call Welcome",
+    icon: "👋",
+    body: `Hi {{name}}, thank you for speaking with {{agent}} from EstateFlow Realty today!\n\nIt was great connecting with you. We're excited to help you find your dream property.\n\n🏡 Based on your interest, we'll send you curated options shortly.\n\nFeel free to reach out anytime — we're here to help!\n\nWarm regards,\nTeam EstateFlow`,
+  },
 ];
 
 type Campaign = {

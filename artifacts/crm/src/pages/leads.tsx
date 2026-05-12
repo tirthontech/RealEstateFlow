@@ -191,7 +191,8 @@ export default function LeadsPage() {
   const [scheduleLead, setScheduleLead] = useState<{ id: number; name: string } | null>(null);
   const qc = useQueryClient();
   const { toast } = useToast();
-  const { profile } = useRole();
+  const { profile, role } = useRole();
+  const isSales = role === "sales";
   const [, setLocation] = useLocation();
 
   const { data: leads, isLoading } = useGetLeads({}, { query: { queryKey: getGetLeadsQueryKey({}) } });
@@ -230,7 +231,7 @@ export default function LeadsPage() {
     createLead.mutate({ data: { ...values, budget: values.budget ?? null, propertyType: values.propertyType ?? null, notes: values.notes ?? null, assignedTo: values.assignedTo ?? null } });
   }
 
-  const allLeads = leads ?? [];
+  const allLeads = (leads ?? []).filter(l => isSales ? l.agentName === profile.name : true);
   const today = new Date().toISOString().slice(0, 10);
   const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString();
 
@@ -561,14 +562,16 @@ export default function LeadsPage() {
                     </Select><FormMessage />
                   </FormItem>
                 )} />
-                <FormField control={form.control} name="assignedTo" render={({ field }) => (
-                  <FormItem className="col-span-2"><FormLabel>Assign to Employee</FormLabel>
-                    <Select value={field.value?.toString() ?? ""} onValueChange={v => field.onChange(Number(v))}>
-                      <SelectTrigger data-testid="select-lead-agent"><SelectValue placeholder="Unassigned" /></SelectTrigger>
-                      <SelectContent>{(agents ?? []).map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}</SelectContent>
-                    </Select><FormMessage />
-                  </FormItem>
-                )} />
+                {!isSales && (
+                  <FormField control={form.control} name="assignedTo" render={({ field }) => (
+                    <FormItem className="col-span-2"><FormLabel>Assign to Employee</FormLabel>
+                      <Select value={field.value?.toString() ?? ""} onValueChange={v => field.onChange(Number(v))}>
+                        <SelectTrigger data-testid="select-lead-agent"><SelectValue placeholder="Unassigned" /></SelectTrigger>
+                        <SelectContent>{(agents ?? []).map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}</SelectContent>
+                      </Select><FormMessage />
+                    </FormItem>
+                  )} />
+                )}
               </div>
               <FormField control={form.control} name="notes" render={({ field }) => (
                 <FormItem><FormLabel>Notes / Last Remark</FormLabel>

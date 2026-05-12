@@ -3,11 +3,12 @@ import { useGetLeads, useGetAgents, getGetLeadsQueryKey } from "@workspace/api-c
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Phone, Home, TrendingUp, CheckCircle2, Clock, Search, Plus, Download,
-  Calendar, MessageSquare, ChevronRight, X, Filter, ArrowUpDown,
+  Calendar, MessageSquare, ChevronRight, X, Filter, ArrowUpDown, MessageCircle,
 } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { useRole } from "@/lib/role-context";
 import { useToast } from "@/hooks/use-toast";
+import { useLocation } from "wouter";
 
 /* ─── Types ───────────────────────────────────────────────────────────── */
 type ActivityType =
@@ -279,10 +280,13 @@ function StatusToggle({ activity, onUpdate }: { activity: Activity; onUpdate: (i
 
 /* ─── Main Page ──────────────────────────────────────────────────────── */
 export default function ActivitiesPage() {
-  const { profile } = useRole();
+  const { profile, role } = useRole();
+  const isSales = role === "sales";
+  const canSendWhatsApp = role === "owner" || role === "manager";
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [activities, setActivities] = useState<Activity[]>(INITIAL_ACTIVITIES);
-  const [timeTab, setTimeTab] = useState<string>("overall");
+  const [timeTab, setTimeTab] = useState<string>(isSales ? "assignee" : "overall");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [scheduleOpen, setScheduleOpen] = useState(false);
@@ -291,12 +295,12 @@ export default function ActivitiesPage() {
   const { data: leads } = useGetLeads({}, { query: { queryKey: getGetLeadsQueryKey({}) } });
   const customerNames = useMemo(() => (leads ?? []).map(l => l.name), [leads]);
 
-  /* Filter by time tab */
+  /* Filter by time tab — sales role always sees own activities only */
   const timeFiltered = useMemo(() => {
-    if (timeTab === "overall") return activities;
-    if (timeTab === "assignee") return activities.filter(a => a.employee === profile.name);
-    return activities.filter(a => getTimeCategory(a) === timeTab);
-  }, [activities, timeTab, profile.name]);
+    const base = isSales ? activities.filter(a => a.employee === profile.name) : activities;
+    if (timeTab === "overall" || timeTab === "assignee") return base;
+    return base.filter(a => getTimeCategory(a) === timeTab);
+  }, [activities, timeTab, profile.name, isSales]);
 
   /* Counts per type (from time-filtered set) */
   const typeCounts = useMemo(() => {
@@ -324,8 +328,26 @@ export default function ActivitiesPage() {
   }
 
   function updateActivity(id: number, remark: string, status: ActivityStatus) {
+    const act = activities.find(a => a.id === id);
     setActivities(prev => prev.map(a => a.id === id ? { ...a, lastRemark: remark, status } : a));
-    if (status === "completed") toast({ title: "Activity marked as done" });
+    if (status === "completed") {
+      if (canSendWhatsApp && act?.activityType === "phone") {
+        toast({
+          title: `Call with ${act.customer} completed`,
+          description: "Send a WhatsApp welcome message?",
+          action: (
+            <button
+              onClick={() => setLocation("/whatsapp")}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white text-xs rounded-lg font-medium hover:bg-green-700 transition-colors whitespace-nowrap"
+            >
+              <MessageCircle className="w-3.5 h-3.5" />Send Welcome
+            </button>
+          ) as any,
+        });
+      } else {
+        toast({ title: "Activity marked as done" });
+      }
+    }
   }
 
   /* Time-of-day greeting */
@@ -340,7 +362,7 @@ export default function ActivitiesPage() {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-foreground">{greeting}, {profile.name.split(" ")[0]}!</h1>
-          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">Track and manage all customer activities — calls, visits, negotiations, and closings.</p>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">{isSales ? "Your assigned activities — calls, visits, and follow-ups." : "Track and manage all customer activities — calls, visits, negotiations, and closings."}</p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <button onClick={() => exportCSV(displayed)}
@@ -357,11 +379,11 @@ export default function ActivitiesPage() {
       {/* Time tabs */}
       <div className="overflow-x-auto scrollbar-hide -mx-1 px-1">
         <div className="flex gap-0.5 border-b border-border min-w-max">
-          {TIME_TABS.map(tab => (
+          {TIME_TABS.filter(tab => isSales ? tab.id !== "assignee" : true).map(tab => (
             <button key={tab.id} onClick={() => { setTimeTab(tab.id); setTypeFilter("all"); }}
               className={cn("px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap",
                 timeTab === tab.id ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground")}>
-              {tab.label}
+              {isSales && tab.id === "overall" ? "My Activities" : tab.label}
             </button>
           ))}
         </div>

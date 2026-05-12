@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Users, Building2, GitBranch, UserCheck,
   Menu, BarChart3, MessageCircle, Plug2, Settings, Calculator,
   Calendar, Bell, X, Search, ChevronRight, ShieldCheck, ChevronDown,
-  CheckSquare, CalendarCheck,
+  CheckSquare, CalendarCheck, Zap,
 } from "lucide-react";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { cn } from "@/lib/utils";
@@ -253,7 +253,61 @@ function GlobalSearch() {
   );
 }
 
-/* ─── Main Layout ──────────────────────────────────────────────────────── */
+const ONLINE_SOURCES = ["website", "google", "facebook", "99acres", "magicbricks", "housing", "ivr"];
+
+/* ─── Online Enquiry Alert (owner + manager only) ──────────────────── */
+function OnlineEnquiryAlert() {
+  const { role } = useRole();
+  const [dismissed, setDismissed] = useState<number[]>([]);
+  const [, setLocation] = useLocation();
+
+  const { data: leads } = useGetLeads(
+    {},
+    { query: { queryKey: getGetLeadsQueryKey(), refetchInterval: 60_000 } }
+  );
+
+  const newOnlineLeads = (leads ?? []).filter(l =>
+    ONLINE_SOURCES.includes(l.source.toLowerCase()) &&
+    l.status === "new" &&
+    !dismissed.includes(l.id) &&
+    new Date(l.createdAt) > new Date(Date.now() - 24 * 60 * 60 * 1000)
+  );
+
+  if ((role !== "owner" && role !== "manager") || newOnlineLeads.length === 0) return null;
+
+  return (
+    <div className="mx-4 mt-3 mb-0 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-start gap-3">
+      <div className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+        <Zap className="w-3.5 h-3.5 text-amber-600" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-semibold text-amber-800">
+          {newOnlineLeads.length} new online {newOnlineLeads.length === 1 ? "enquiry" : "enquiries"}
+        </p>
+        <p className="text-[11px] text-amber-700 mt-0.5 leading-snug">
+          {newOnlineLeads.slice(0, 2).map(l => l.name).join(", ")}
+          {newOnlineLeads.length > 2 ? ` +${newOnlineLeads.length - 2} more` : ""} — assign to an agent
+        </p>
+        <div className="flex items-center gap-2 mt-2">
+          <button
+            onClick={() => setLocation("/leads")}
+            className="text-[11px] font-semibold text-amber-800 bg-amber-200 hover:bg-amber-300 px-2.5 py-1 rounded-md transition-colors"
+          >
+            Assign Now
+          </button>
+          <button
+            onClick={() => setDismissed(prev => [...prev, ...newOnlineLeads.map(l => l.id)])}
+            className="text-[11px] text-amber-600 hover:text-amber-800 transition-colors"
+          >
+            Dismiss
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Main Layout ──────────────────────────────────────────────────── */
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const [open, setOpen] = useState(false);
@@ -320,8 +374,11 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           </div>
         )}
 
+        {/* Online enquiry alert */}
+        <OnlineEnquiryAlert />
+
         {/* Role switcher / profile */}
-        <div className="border-t border-sidebar-border">
+        <div className="border-t border-sidebar-border mt-2">
           <RoleSwitcher />
         </div>
       </aside>
