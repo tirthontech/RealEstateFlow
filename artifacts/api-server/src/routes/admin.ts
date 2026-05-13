@@ -67,6 +67,11 @@ router.post("/admin/users", async (req, res): Promise<void> => {
       })
       .returning(PUBLIC_FIELDS);
 
+    // Back-link agent → user so agents page can show login status
+    if (linkedAgentId) {
+      await db.update(agentsTable).set({ userId: user.id }).where(eq(agentsTable.id, linkedAgentId));
+    }
+
     res.status(201).json({ ...user, agentCreated: linkedAgentId != null });
   } catch (err: any) {
     if (err.code === "23505") {

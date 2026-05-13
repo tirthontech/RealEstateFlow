@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import {
-  Plus, Trash2, ShieldCheck, ShieldOff, Edit2, X, Eye, EyeOff,
+  Plus, Trash2, ShieldCheck, ShieldOff, Edit2, X, Eye, EyeOff, UserCheck,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { ROLE_PROFILES, type UserRole } from "@/lib/role-context";
@@ -28,7 +28,6 @@ const ROLE_COLORS: Record<string, string> = {
   manager: "bg-green-100 text-green-800",
   agent:   "bg-purple-100 text-purple-800",
   broker:  "bg-teal-100 text-teal-800",
-  agent:   "bg-teal-100 text-teal-800",
 };
 
 function roleColor(role: string) {
@@ -171,7 +170,7 @@ export default function AdminUsersPage() {
           <table className="w-full text-sm">
             <thead className="border-b border-border bg-muted/10">
               <tr>
-                {["Name", "Username", "Role", "Admin", "Created", ""].map(h => (
+                {["Name", "Username", "Role", "Agent Profile", "Admin", "Created", ""].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{h}</th>
                 ))}
               </tr>
@@ -189,6 +188,11 @@ export default function AdminUsersPage() {
                     <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-semibold capitalize ${roleColor(u.role)}`}>
                       {roleLabel(u.role)}
                     </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    {u.agentId
+                      ? <span className="flex items-center gap-1 text-xs text-green-700 font-medium"><UserCheck className="w-3.5 h-3.5" />Linked</span>
+                      : <span className="text-xs text-muted-foreground">—</span>}
                   </td>
                   <td className="px-4 py-3">
                     {u.isAdmin

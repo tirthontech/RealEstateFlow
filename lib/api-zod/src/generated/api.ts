@@ -398,6 +398,10 @@ export const GetAgentsResponseItem = zod.object({
   activeLeads: zod.number(),
   dealsCount: zod.number(),
   revenue: zod.number(),
+  activitiesCount: zod.number(),
+  userId: zod.number().nullish(),
+  username: zod.string().nullish(),
+  hasLogin: zod.boolean(),
   createdAt: zod.string(),
 });
 export const GetAgentsResponse = zod.array(GetAgentsResponseItem);
@@ -430,6 +434,10 @@ export const GetAgentResponse = zod.object({
   activeLeads: zod.number(),
   dealsCount: zod.number(),
   revenue: zod.number(),
+  activitiesCount: zod.number(),
+  userId: zod.number().nullish(),
+  username: zod.string().nullish(),
+  hasLogin: zod.boolean(),
   createdAt: zod.string(),
 });
 
@@ -458,6 +466,10 @@ export const UpdateAgentResponse = zod.object({
   activeLeads: zod.number(),
   dealsCount: zod.number(),
   revenue: zod.number(),
+  activitiesCount: zod.number(),
+  userId: zod.number().nullish(),
+  username: zod.string().nullish(),
+  hasLogin: zod.boolean(),
   createdAt: zod.string(),
 });
 
