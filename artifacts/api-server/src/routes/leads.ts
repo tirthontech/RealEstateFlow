@@ -169,7 +169,7 @@ router.put("/leads/:id", async (req, res): Promise<void> => {
   // Log assignment event and notify assigned agent
   if (parsed.data.assignedTo && parsed.data.assignedTo !== prevLead?.assignedTo) {
     await db.insert(activityTable).values({
-      type: "lead_created",
+      type: "lead_assigned",
       description: `Lead assigned to ${agentName ?? "agent"}`,
       entityName: lead.name,
       agentId: lead.assignedTo ?? undefined,
@@ -202,7 +202,7 @@ router.put("/leads/:id", async (req, res): Promise<void> => {
       );
   } else if (parsed.data.status && parsed.data.status !== prevLead?.status) {
     await db.insert(activityTable).values({
-      type: "lead_created",
+      type: "lead_status_updated",
       description: `Agent updated lead stage to ${parsed.data.status}`,
       entityName: lead.name,
       agentId: lead.assignedTo ?? undefined,

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useGetLeads, useGetProperties, useGetAgents, getGetLeadsQueryKey, getGetPropertiesQueryKey, getGetAgentsQueryKey } from "@workspace/api-client-react";
+import { useGetLeads, useGetProperties, useGetAgents, getGetLeadsQueryKey, getGetPropertiesQueryKey } from "@workspace/api-client-react";
 import { customFetch } from "@workspace/api-client-react";
 import { viewingKeys } from "@/lib/queryKeys";
 import { Calendar, Clock, MapPin, User, Plus, CheckCircle2, XCircle, HelpCircle, Trash2, Phone } from "lucide-react";
@@ -83,7 +83,7 @@ export default function ViewingsPage() {
   const { data: viewings = [], isLoading } = useViewings();
   const { data: leads } = useGetLeads({}, { query: { queryKey: getGetLeadsQueryKey() } });
   const { data: properties } = useGetProperties({}, { query: { queryKey: getGetPropertiesQueryKey() } });
-  const { data: agents } = useGetAgents({ query: { queryKey: getGetAgentsQueryKey() } });
+  const { data: agents } = useGetAgents();
 
   const createViewing = useCreateViewing();
   const updateViewing = useUpdateViewing();

@@ -115,7 +115,7 @@ router.delete("/viewings/:id", ownerMiddleware as any, async (req, res): Promise
   const [viewing] = await db.select().from(viewingsTable).where(eq(viewingsTable.id, id));
   if (!viewing) { res.status(404).json({ error: "Viewing not found" }); return; }
   await db.delete(viewingsTable).where(eq(viewingsTable.id, id));
-  const entityName = viewing.leadId ? `Viewing #${id}` : `Viewing #${id}`;
+  const entityName = `Viewing #${id}`;
   await db.insert(activityTable).values({
     type: "viewing_deleted",
     description: `Viewing deleted`,

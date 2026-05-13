@@ -79,20 +79,26 @@ export function useActivities() {
   });
 
   const create = useMutation({
-    mutationFn: (input: CreateActivityInput) =>
-      apiFetch<ScheduledActivity>("/api/activities", token!, "POST", input),
+    mutationFn: (input: CreateActivityInput) => {
+      if (!token) return Promise.reject(new Error("Not authenticated"));
+      return apiFetch<ScheduledActivity>("/api/activities", token, "POST", input);
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ACTIVITIES_QUERY_KEY }),
   });
 
   const update = useMutation({
-    mutationFn: ({ id, ...input }: UpdateActivityInput & { id: number }) =>
-      apiFetch<ScheduledActivity>(`/api/activities/${id}`, token!, "PUT", input),
+    mutationFn: ({ id, ...input }: UpdateActivityInput & { id: number }) => {
+      if (!token) return Promise.reject(new Error("Not authenticated"));
+      return apiFetch<ScheduledActivity>(`/api/activities/${id}`, token, "PUT", input);
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ACTIVITIES_QUERY_KEY }),
   });
 
   const remove = useMutation({
-    mutationFn: (id: number) =>
-      apiFetch(`/api/activities/${id}`, token!, "DELETE"),
+    mutationFn: (id: number) => {
+      if (!token) return Promise.reject(new Error("Not authenticated"));
+      return apiFetch(`/api/activities/${id}`, token, "DELETE");
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ACTIVITIES_QUERY_KEY }),
   });
 

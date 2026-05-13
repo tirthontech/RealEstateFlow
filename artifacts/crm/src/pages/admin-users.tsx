@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { ROLE_PROFILES, type UserRole } from "@/lib/role-context";
+import { AGENT_ROLES } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 
 interface PlatformUser {
@@ -38,7 +39,6 @@ function roleLabel(role: string) {
   return ROLE_PROFILES.find(r => r.value === role)?.label ?? role;
 }
 
-const AGENT_ROLES = ["manager", "agent", "broker"];
 const EMPTY_FORM = { username: "", password: "", name: "", email: "", role: "agent" as UserRole, isAdmin: false };
 
 export default function AdminUsersPage() {
