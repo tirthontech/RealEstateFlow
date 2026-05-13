@@ -9,9 +9,10 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { useRole, ROLE_PROFILES, type UserRole } from "@/lib/role-context";
 import {
-  useGetRecentActivity, useGetLeads,
+  useGetRecentActivity, useGetLeads, useUpdateLead, useGetAgents,
   getGetRecentActivityQueryKey, getGetLeadsQueryKey,
 } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 
 /* ─── Nav definitions ──────────────────────────────────────────────────── */
 const ALL_NAV = [
@@ -259,12 +260,24 @@ const ONLINE_SOURCES = ["website", "google", "facebook", "99acres", "magicbricks
 function OnlineEnquiryAlert() {
   const { role } = useRole();
   const [dismissed, setDismissed] = useState<number[]>([]);
-  const [, setLocation] = useLocation();
+  const [showModal, setShowModal] = useState(false);
+  const [assignments, setAssignments] = useState<Record<number, string>>({});
+  const [saving, setSaving] = useState(false);
+  const qc = useQueryClient();
 
   const { data: leads } = useGetLeads(
     {},
     { query: { queryKey: getGetLeadsQueryKey(), refetchInterval: 60_000 } }
   );
+  const { data: agents } = useGetAgents();
+
+  const updateLead = useUpdateLead({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getGetLeadsQueryKey() });
+      },
+    },
+  });
 
   const newOnlineLeads = (leads ?? []).filter(l =>
     ONLINE_SOURCES.includes(l.source.toLowerCase()) &&
@@ -275,35 +288,100 @@ function OnlineEnquiryAlert() {
 
   if ((role !== "owner" && role !== "manager") || newOnlineLeads.length === 0) return null;
 
+  async function handleAssign() {
+    setSaving(true);
+    await Promise.all(
+      newOnlineLeads
+        .filter(l => assignments[l.id])
+        .map(l => updateLead.mutateAsync({ id: l.id, data: { assignedTo: Number(assignments[l.id]) } }))
+    );
+    setSaving(false);
+    setDismissed(prev => [...prev, ...newOnlineLeads.map(l => l.id)]);
+    setShowModal(false);
+  }
+
   return (
-    <div className="mx-4 mt-3 mb-0 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-start gap-3">
-      <div className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-        <Zap className="w-3.5 h-3.5 text-amber-600" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-xs font-semibold text-amber-800">
-          {newOnlineLeads.length} new online {newOnlineLeads.length === 1 ? "enquiry" : "enquiries"}
-        </p>
-        <p className="text-[11px] text-amber-700 mt-0.5 leading-snug">
-          {newOnlineLeads.slice(0, 2).map(l => l.name).join(", ")}
-          {newOnlineLeads.length > 2 ? ` +${newOnlineLeads.length - 2} more` : ""} — assign to an agent
-        </p>
-        <div className="flex items-center gap-2 mt-2">
-          <button
-            onClick={() => setLocation("/leads")}
-            className="text-[11px] font-semibold text-amber-800 bg-amber-200 hover:bg-amber-300 px-2.5 py-1 rounded-md transition-colors"
-          >
-            Assign Now
-          </button>
-          <button
-            onClick={() => setDismissed(prev => [...prev, ...newOnlineLeads.map(l => l.id)])}
-            className="text-[11px] text-amber-600 hover:text-amber-800 transition-colors"
-          >
-            Dismiss
-          </button>
+    <>
+      <div className="mx-4 mt-3 mb-0 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-start gap-3">
+        <div className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+          <Zap className="w-3.5 h-3.5 text-amber-600" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-semibold text-amber-800">
+            {newOnlineLeads.length} new online {newOnlineLeads.length === 1 ? "enquiry" : "enquiries"}
+          </p>
+          <p className="text-[11px] text-amber-700 mt-0.5 leading-snug">
+            {newOnlineLeads.slice(0, 2).map(l => l.name).join(", ")}
+            {newOnlineLeads.length > 2 ? ` +${newOnlineLeads.length - 2} more` : ""} — assign to an agent
+          </p>
+          <div className="flex items-center gap-2 mt-2">
+            <button
+              onClick={() => { setAssignments({}); setShowModal(true); }}
+              className="text-[11px] font-semibold text-amber-800 bg-amber-200 hover:bg-amber-300 px-2.5 py-1 rounded-md transition-colors"
+            >
+              Assign Now
+            </button>
+            <button
+              onClick={() => setDismissed(prev => [...prev, ...newOnlineLeads.map(l => l.id)])}
+              className="text-[11px] text-amber-600 hover:text-amber-800 transition-colors"
+            >
+              Dismiss
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+
+      {showModal && (
+        <>
+          <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm" onClick={() => setShowModal(false)} />
+          <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[70] w-full max-w-sm bg-card border border-border rounded-2xl shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <div className="flex items-center gap-2">
+                <Zap className="w-4 h-4 text-amber-500" />
+                <p className="text-sm font-semibold text-foreground">Assign Online Enquiries</p>
+              </div>
+              <button onClick={() => setShowModal(false)} className="text-muted-foreground hover:text-foreground p-0.5 rounded">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="px-5 py-4 space-y-4 max-h-80 overflow-y-auto">
+              {newOnlineLeads.map(lead => (
+                <div key={lead.id} className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">{lead.name}</p>
+                      <p className="text-[11px] text-muted-foreground capitalize">{lead.source} · {lead.phone ?? lead.email ?? "—"}</p>
+                    </div>
+                  </div>
+                  <select
+                    value={assignments[lead.id] ?? ""}
+                    onChange={e => setAssignments(prev => ({ ...prev, [lead.id]: e.target.value }))}
+                    className="w-full text-xs border border-border rounded-lg px-3 py-1.5 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  >
+                    <option value="">— Select agent —</option>
+                    {(agents ?? []).map(a => (
+                      <option key={a.id} value={a.id}>{a.name}</option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border bg-muted/20">
+              <button onClick={() => setShowModal(false)} className="text-sm text-muted-foreground hover:text-foreground px-3 py-1.5 rounded-lg transition-colors">
+                Cancel
+              </button>
+              <button
+                onClick={handleAssign}
+                disabled={saving || newOnlineLeads.every(l => !assignments[l.id])}
+                className="text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 px-4 py-1.5 rounded-lg transition-colors"
+              >
+                {saving ? "Assigning..." : "Assign"}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </>
   );
 }
 

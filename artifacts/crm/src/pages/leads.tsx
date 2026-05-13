@@ -228,7 +228,11 @@ export default function LeadsPage() {
   });
 
   function onSubmit(values: FormValues) {
-    createLead.mutate({ data: { ...values, budget: values.budget ?? null, propertyType: values.propertyType ?? null, notes: values.notes ?? null, assignedTo: values.assignedTo ?? null } });
+    const selfAgentId = isSales
+      ? (agents ?? []).find(a => a.name === profile.name)?.id ?? null
+      : values.assignedTo ?? null;
+
+    createLead.mutate({ data: { ...values, budget: values.budget ?? null, propertyType: values.propertyType ?? null, notes: values.notes ?? null, assignedTo: selfAgentId } });
   }
 
   const allLeads = (leads ?? []).filter(l => isSales ? l.agentName === profile.name : true);
