@@ -4,16 +4,19 @@ import {
   Menu, BarChart3, MessageCircle, Plug2, Settings, Calculator,
   Calendar, Bell, X, Search, ChevronRight, ChevronDown,
   CheckSquare, CalendarCheck, Zap, LogOut, ShieldCheck,
+  UserPlus, CheckCheck,
 } from "lucide-react";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { useRole } from "@/lib/role-context";
 import { useAuth } from "@/lib/auth-context";
 import {
-  useGetRecentActivity, useGetLeads, useUpdateLead, useGetAgents,
-  getGetRecentActivityQueryKey, getGetLeadsQueryKey,
+  useGetLeads, useUpdateLead, useGetAgents,
+  getGetLeadsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useNotifications } from "@/lib/use-notifications";
+import { useToast } from "@/hooks/use-toast";
 
 /* ─── Nav definitions ──────────────────────────────────────────────────── */
 const ALL_NAV = [
@@ -119,45 +122,107 @@ function UserProfile() {
 /* ─── Notification bell ────────────────────────────────────────────────── */
 function NotificationBell() {
   const [open, setOpen] = useState(false);
-  const { data: activity } = useGetRecentActivity({
-    query: { queryKey: getGetRecentActivityQueryKey(), refetchInterval: 60_000 },
-  });
-  const items = activity ?? [];
-  const unread = Math.min(items.length, 9);
+  const [, setLocation] = useLocation();
+  const { data, unreadCount, markRead, markAllRead } = useNotifications();
+  const { toast } = useToast();
+  const mountedRef = useRef(false);
+  const prevIdsRef = useRef(new Set<number>());
+
+  // Toast popup when new portal_lead notifications arrive (after initial mount)
+  useEffect(() => {
+    if (!data.length && !mountedRef.current) return;
+    if (!mountedRef.current) {
+      mountedRef.current = true;
+      prevIdsRef.current = new Set(data.map(n => n.id));
+      return;
+    }
+    const newPortalLeads = data.filter(
+      n => !n.isRead && n.type === "portal_lead" && !prevIdsRef.current.has(n.id),
+    );
+    if (newPortalLeads.length > 0) {
+      toast({
+        title: `${newPortalLeads.length} new portal lead${newPortalLeads.length > 1 ? "s" : ""} received`,
+        description: newPortalLeads[0].message ?? "New unassigned leads need your attention.",
+      });
+    }
+    prevIdsRef.current = new Set(data.map(n => n.id));
+  }, [data, toast]);
+
+  function handleOpen() {
+    setOpen(o => !o);
+  }
+
+  function handleNotificationClick(n: typeof data[0]) {
+    markRead(n.id);
+    setOpen(false);
+    if (n.leadId) setLocation("/leads");
+  }
+
+  const typeIcon = (type: string) =>
+    type === "portal_lead"
+      ? <UserPlus className="w-3.5 h-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
+      : <Bell className="w-3.5 h-3.5 text-primary flex-shrink-0 mt-0.5" />;
 
   return (
     <div className="relative">
-      <button data-testid="button-notifications" onClick={() => setOpen(!open)}
+      <button data-testid="button-notifications" onClick={handleOpen}
         className="relative p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
       >
         <Bell className="w-[18px] h-[18px]" />
-        {unread > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-primary text-primary-foreground text-[9px] font-bold rounded-full flex items-center justify-center leading-none">
-            {unread}
+        {unreadCount > 0 && (
+          <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center leading-none animate-pulse">
+            {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}
       </button>
+
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div className="absolute right-0 top-10 z-50 w-80 bg-card border border-border rounded-xl shadow-xl overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
-              <p className="text-sm font-semibold text-foreground">Notifications</p>
-              <button onClick={() => setOpen(false)} className="text-muted-foreground hover:text-foreground p-0.5 rounded"><X className="w-4 h-4" /></button>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-semibold text-foreground">Notifications</p>
+                {unreadCount > 0 && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">{unreadCount} new</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {unreadCount > 0 && (
+                  <button onClick={() => markAllRead()} title="Mark all read"
+                    className="text-muted-foreground hover:text-primary transition-colors p-0.5 rounded">
+                    <CheckCheck className="w-3.5 h-3.5" />
+                  </button>
+                )}
+                <button onClick={() => setOpen(false)} className="text-muted-foreground hover:text-foreground p-0.5 rounded">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
-            {items.length === 0 ? (
-              <div className="py-8 text-center"><Bell className="w-6 h-6 mx-auto text-muted-foreground/30 mb-2" /><p className="text-sm text-muted-foreground">All caught up!</p></div>
+
+            {data.length === 0 ? (
+              <div className="py-8 text-center">
+                <Bell className="w-6 h-6 mx-auto text-muted-foreground/30 mb-2" />
+                <p className="text-sm text-muted-foreground">All caught up!</p>
+              </div>
             ) : (
-              <div className="divide-y divide-border max-h-72 overflow-y-auto">
-                {items.slice(0, 8).map((item) => (
-                  <div key={item.id} className="px-4 py-3 hover:bg-muted/30 transition-colors cursor-pointer">
+              <div className="divide-y divide-border max-h-80 overflow-y-auto">
+                {data.map((n) => (
+                  <div key={n.id}
+                    onClick={() => handleNotificationClick(n)}
+                    className={cn(
+                      "px-4 py-3 hover:bg-muted/30 transition-colors cursor-pointer",
+                      !n.isRead && "bg-primary/[0.03]",
+                    )}>
                     <div className="flex items-start gap-2.5">
-                      <div className="w-2 h-2 rounded-full bg-primary mt-1.5 flex-shrink-0" />
-                      <div>
-                        <p className="text-xs font-medium text-foreground leading-snug">{item.entityName} — {item.description}</p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">
-                          {new Date(item.createdAt).toLocaleString("en-IN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                          {item.agentName && ` · ${item.agentName}`}
+                      {!n.isRead && <div className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 flex-shrink-0" />}
+                      {n.isRead && <div className="w-1.5 h-1.5 mt-1.5 flex-shrink-0" />}
+                      {typeIcon(n.type)}
+                      <div className="flex-1 min-w-0">
+                        <p className={cn("text-xs leading-snug", n.isRead ? "text-muted-foreground" : "font-medium text-foreground")}>{n.title}</p>
+                        {n.message && <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug line-clamp-2">{n.message}</p>}
+                        <p className="text-[10px] text-muted-foreground/70 mt-0.5">
+                          {new Date(n.createdAt).toLocaleString("en-IN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                         </p>
                       </div>
                     </div>
@@ -165,9 +230,10 @@ function NotificationBell() {
                 ))}
               </div>
             )}
+
             <div className="border-t border-border px-4 py-2">
-              <Link href="/dashboard" onClick={() => setOpen(false)} className="text-xs text-primary font-medium hover:underline flex items-center gap-1">
-                View all activity <ChevronRight className="w-3 h-3" />
+              <Link href="/leads" onClick={() => setOpen(false)} className="text-xs text-primary font-medium hover:underline flex items-center gap-1">
+                View all leads <ChevronRight className="w-3 h-3" />
               </Link>
             </div>
           </div>
@@ -266,9 +332,7 @@ function GlobalSearch() {
   );
 }
 
-const ONLINE_SOURCES = ["website", "google", "facebook", "99acres", "magicbricks", "housing", "ivr"];
-
-/* ─── Online Enquiry Alert (owner + manager only) ──────────────────── */
+/* ─── Unassigned Leads Alert (owner + manager only) ────────────────── */
 function OnlineEnquiryAlert() {
   const { role } = useRole();
   const [dismissed, setDismissed] = useState<number[]>([]);
@@ -279,7 +343,7 @@ function OnlineEnquiryAlert() {
 
   const { data: leads } = useGetLeads(
     {},
-    { query: { queryKey: getGetLeadsQueryKey(), refetchInterval: 60_000 } }
+    { query: { queryKey: getGetLeadsQueryKey(), refetchInterval: 30_000 } }
   );
   const { data: agents } = useGetAgents();
 
@@ -291,11 +355,10 @@ function OnlineEnquiryAlert() {
     },
   });
 
+  // Show all unassigned leads regardless of source
   const newOnlineLeads = (leads ?? []).filter(l =>
-    ONLINE_SOURCES.includes(l.source.toLowerCase()) &&
-    l.status === "new" &&
-    !dismissed.includes(l.id) &&
-    new Date(l.createdAt) > new Date(Date.now() - 24 * 60 * 60 * 1000)
+    l.status === "unassigned" &&
+    !dismissed.includes(l.id)
   );
 
   if ((role !== "owner" && role !== "manager") || newOnlineLeads.length === 0) return null;
@@ -320,11 +383,11 @@ function OnlineEnquiryAlert() {
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-xs font-semibold text-amber-800">
-            {newOnlineLeads.length} new online {newOnlineLeads.length === 1 ? "enquiry" : "enquiries"}
+            {newOnlineLeads.length} unassigned {newOnlineLeads.length === 1 ? "lead" : "leads"}
           </p>
           <p className="text-[11px] text-amber-700 mt-0.5 leading-snug">
             {newOnlineLeads.slice(0, 2).map(l => l.name).join(", ")}
-            {newOnlineLeads.length > 2 ? ` +${newOnlineLeads.length - 2} more` : ""} — assign to an agent
+            {newOnlineLeads.length > 2 ? ` +${newOnlineLeads.length - 2} more` : ""} — needs assignment
           </p>
           <div className="flex items-center gap-2 mt-2">
             <button
@@ -350,7 +413,7 @@ function OnlineEnquiryAlert() {
             <div className="flex items-center justify-between px-5 py-4 border-b border-border">
               <div className="flex items-center gap-2">
                 <Zap className="w-4 h-4 text-amber-500" />
-                <p className="text-sm font-semibold text-foreground">Assign Online Enquiries</p>
+                <p className="text-sm font-semibold text-foreground">Assign Unassigned Leads</p>
               </div>
               <button onClick={() => setShowModal(false)} className="text-muted-foreground hover:text-foreground p-0.5 rounded">
                 <X className="w-4 h-4" />

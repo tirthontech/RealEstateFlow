@@ -10,6 +10,7 @@ import dealsRouter from "./deals";
 import dashboardRouter from "./dashboard";
 import viewingsRouter from "./viewings";
 import unitsRouter from "./units";
+import notificationsRouter from "./notifications";
 
 const router: IRouter = Router();
 
@@ -29,5 +30,6 @@ router.use(dealsRouter);
 router.use(dashboardRouter);
 router.use(viewingsRouter);
 router.use(unitsRouter);
+router.use(notificationsRouter);
 
 export default router;

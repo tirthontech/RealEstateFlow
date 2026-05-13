@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike, and, type SQL } from "drizzle-orm";
-import { db, leadsTable, agentsTable, activityTable } from "@workspace/db";
+import { db, leadsTable, agentsTable, activityTable, notificationsTable, usersTable } from "@workspace/db";
 import {
   CreateLeadBody,
   UpdateLeadBody,
@@ -83,6 +83,26 @@ router.post("/leads", async (req, res): Promise<void> => {
     agentId: lead.assignedTo ?? undefined,
   });
 
+  // Notify owners and managers about unassigned portal leads
+  if (!lead.assignedTo) {
+    await db.insert(notificationsTable).values([
+      {
+        type: "portal_lead",
+        title: "New portal lead received",
+        message: `${lead.name} from ${lead.source} is awaiting assignment`,
+        leadId: lead.id,
+        targetRole: "owner",
+      },
+      {
+        type: "portal_lead",
+        title: "New portal lead received",
+        message: `${lead.name} from ${lead.source} is awaiting assignment`,
+        leadId: lead.id,
+        targetRole: "manager",
+      },
+    ]);
+  }
+
   res.status(201).json(formatLead(lead, agentName));
 });
 
@@ -145,7 +165,7 @@ router.put("/leads/:id", async (req, res): Promise<void> => {
     agentName = agent?.name ?? null;
   }
 
-  // Log assignment event
+  // Log assignment event and notify assigned agent
   if (parsed.data.assignedTo && parsed.data.assignedTo !== prevLead?.assignedTo) {
     await db.insert(activityTable).values({
       type: "lead_created",
@@ -153,6 +173,32 @@ router.put("/leads/:id", async (req, res): Promise<void> => {
       entityName: lead.name,
       agentId: lead.assignedTo ?? undefined,
     });
+
+    // Notify the agent via their user account
+    const [agentUser] = await db
+      .select({ id: usersTable.id })
+      .from(usersTable)
+      .where(eq(usersTable.agentId, lead.assignedTo!));
+    if (agentUser) {
+      await db.insert(notificationsTable).values({
+        type: "lead_assigned",
+        title: "New lead assigned to you",
+        message: `${lead.name} has been assigned to you`,
+        leadId: lead.id,
+        targetUserId: agentUser.id,
+      });
+    }
+
+    // Mark portal_lead notifications for this lead as read (it's been handled)
+    await db
+      .update(notificationsTable)
+      .set({ isRead: true })
+      .where(
+        and(
+          eq(notificationsTable.leadId, lead.id),
+          eq(notificationsTable.type, "portal_lead"),
+        ),
+      );
   } else if (parsed.data.status && parsed.data.status !== prevLead?.status) {
     await db.insert(activityTable).values({
       type: "lead_created",

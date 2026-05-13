@@ -6,6 +6,7 @@ import {
   getGetLeadsQueryKey, getGetDashboardStatsQueryKey, getGetLeadSourcesQueryKey,
   useGetAgents,
 } from "@workspace/api-client-react";
+import type { Lead } from "@workspace/api-client-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -201,40 +202,87 @@ function LeadAvatar({ name, score }: { name: string; score: number }) {
 
 /* ─── Assign Lead Dialog ──────────────────────────────────────────── */
 function AssignLeadDialog({ lead, agents, onAssign, onClose }: {
-  lead: { id: number; name: string };
-  agents: { id: number; name: string }[];
+  lead: Lead;
+  agents: { id: number; name: string; role: string }[];
   onAssign: (leadId: number, agentId: number) => void;
   onClose: () => void;
 }) {
   const [selectedAgentId, setSelectedAgentId] = useState<string>("");
+  const priority = priorityInfo(lead.score);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <div className="bg-card rounded-xl border border-border shadow-xl w-full max-w-sm p-5 space-y-4">
+      <div className="bg-card rounded-xl border border-border shadow-xl w-full max-w-md p-5 space-y-4">
+        {/* Header */}
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-foreground flex items-center gap-2">
             <UserPlus className="w-4 h-4 text-primary" />Assign Lead
           </h3>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Assign <span className="font-semibold text-foreground">{lead.name}</span> to an agent.
-          The lead status will automatically change to <span className="font-semibold">New</span>.
-        </p>
+
+        {/* Lead details card */}
+        <div className="bg-muted/30 rounded-xl p-4 space-y-3 border border-border">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-bold flex-shrink-0">
+                {lead.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()}
+              </div>
+              <div>
+                <p className="font-semibold text-foreground text-sm">{lead.name}</p>
+                <p className="text-[10px] text-muted-foreground capitalize">{lead.source.replace(/_/g, " ")}</p>
+              </div>
+            </div>
+            <span className={cn("inline-flex items-center gap-0.5 px-2 py-0.5 rounded text-[10px] font-semibold border flex-shrink-0", priority.cls)}>
+              <priority.Icon className="w-3 h-3" />{priority.label}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+            {lead.phone && (
+              <div className="flex items-center gap-1.5 text-muted-foreground">
+                <Phone className="w-3 h-3 flex-shrink-0" />{lead.phone}
+              </div>
+            )}
+            {lead.email && (
+              <div className="text-muted-foreground truncate">{lead.email}</div>
+            )}
+            {lead.budget && (
+              <div className="text-muted-foreground">Budget: <span className="font-medium text-foreground">{formatCurrency(lead.budget)}</span></div>
+            )}
+            {lead.propertyType && (
+              <div className="text-muted-foreground capitalize">Type: {lead.propertyType}</div>
+            )}
+          </div>
+
+          {lead.notes && (
+            <p className="text-[11px] text-muted-foreground bg-background border border-border rounded-lg px-2.5 py-1.5 leading-relaxed line-clamp-2">
+              {lead.notes}
+            </p>
+          )}
+
+          <p className="text-[10px] text-muted-foreground/70">
+            Received {new Date(lead.createdAt).toLocaleString("en-IN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+          </p>
+        </div>
+
+        {/* Agent selector */}
         <div>
-          <label className="text-xs font-medium text-muted-foreground block mb-1.5">Select Agent</label>
+          <label className="text-xs font-medium text-muted-foreground block mb-1.5">Assign to Agent</label>
           <select value={selectedAgentId} onChange={e => setSelectedAgentId(e.target.value)}
             className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/30">
             <option value="">— Choose an agent —</option>
-            {agents.map(a => <option key={a.id} value={String(a.id)}>{a.name}</option>)}
+            {agents.map(a => <option key={a.id} value={String(a.id)}>{a.name} ({a.role})</option>)}
           </select>
+          <p className="text-[10px] text-muted-foreground mt-1">Status will automatically change to <strong>New</strong> once assigned.</p>
         </div>
+
         <div className="flex gap-2 pt-1">
           <button
             disabled={!selectedAgentId}
             onClick={() => { if (selectedAgentId) onAssign(lead.id, Number(selectedAgentId)); }}
-            className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed">
-            Assign
+            className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5">
+            <UserPlus className="w-3.5 h-3.5" />Assign Lead
           </button>
           <button onClick={onClose} className="flex-1 py-2 border border-border rounded-lg text-sm font-medium hover:bg-muted/50 transition-colors">Cancel</button>
         </div>
@@ -250,7 +298,7 @@ export default function LeadsPage() {
   const [quickFilter, setQuickFilter]   = useState<string | null>(null);
   const [showCreate, setShowCreate]     = useState(false);
   const [scheduleLead, setScheduleLead] = useState<{ id: number; name: string } | null>(null);
-  const [assignLead, setAssignLead]     = useState<{ id: number; name: string } | null>(null);
+  const [assignLead, setAssignLead]     = useState<Lead | null>(null);
   const qc = useQueryClient();
   const { toast } = useToast();
   const { profile, role } = useRole();
@@ -614,7 +662,7 @@ export default function LeadsPage() {
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         {canAssign && lead.status === "unassigned" ? (
                           <button title="Assign to Agent"
-                            onClick={() => setAssignLead({ id: lead.id, name: lead.name })}
+                            onClick={() => setAssignLead(lead)}
                             className="flex items-center gap-1 px-2 py-1 rounded-lg bg-orange-50 hover:bg-orange-100 text-orange-700 text-xs font-medium transition-colors">
                             <UserPlus className="w-3 h-3" />Assign
                           </button>

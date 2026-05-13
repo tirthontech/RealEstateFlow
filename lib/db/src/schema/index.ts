@@ -6,3 +6,4 @@ export * from "./activity";
 export * from "./viewings";
 export * from "./users";
 export * from "./units";
+export * from "./notifications";
