@@ -2,12 +2,13 @@ import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, Users, Building2, GitBranch, UserCheck,
   Menu, BarChart3, MessageCircle, Plug2, Settings, Calculator,
-  Calendar, Bell, X, Search, ChevronRight, ShieldCheck, ChevronDown,
-  CheckSquare, CalendarCheck, Zap,
+  Calendar, Bell, X, Search, ChevronRight, ChevronDown,
+  CheckSquare, CalendarCheck, Zap, LogOut, ShieldCheck,
 } from "lucide-react";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { cn } from "@/lib/utils";
-import { useRole, ROLE_PROFILES, type UserRole } from "@/lib/role-context";
+import { useRole } from "@/lib/role-context";
+import { useAuth } from "@/lib/auth-context";
 import {
   useGetRecentActivity, useGetLeads, useUpdateLead, useGetAgents,
   getGetRecentActivityQueryKey, getGetLeadsQueryKey,
@@ -55,15 +56,22 @@ function NavItem({ href, label, icon: Icon, active, onNav, badge }: {
   );
 }
 
-/* ─── Role switcher ────────────────────────────────────────────────────── */
-function RoleSwitcher() {
-  const { role, setRole, profile } = useRole();
+/* ─── User profile + logout ─────────────────────────────────────────────── */
+function UserProfile() {
+  const { profile } = useRole();
+  const { user, logout } = useAuth();
+  const [, setLocation] = useLocation();
   const [open, setOpen] = useState(false);
+
+  function handleLogout() {
+    logout();
+    setLocation("/login");
+  }
 
   return (
     <div className="relative">
       <button
-        onClick={() => setOpen(!open)}
+        onClick={() => setOpen(o => !o)}
         className="w-full flex items-center gap-3 px-4 py-3 hover:bg-sidebar-accent/50 transition-colors"
       >
         <div className={cn("w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0", profile.color)}>
@@ -80,23 +88,27 @@ function RoleSwitcher() {
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div className="absolute bottom-full left-0 right-0 mb-1 z-50 bg-card border border-border rounded-xl shadow-xl overflow-hidden mx-2">
-            <div className="px-3 py-2 border-b border-border">
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Switch Role (Demo)</p>
+            <div className="px-3 py-2.5 border-b border-border">
+              <p className="text-xs font-semibold text-foreground">{profile.name}</p>
+              <p className="text-[10px] text-muted-foreground">{user?.username} · {profile.label}</p>
             </div>
-            {ROLE_PROFILES.map((r) => (
-              <button key={r.value} onClick={() => { setRole(r.value as UserRole); setOpen(false); }}
-                className={cn("w-full flex items-center gap-3 px-3 py-2.5 hover:bg-muted/50 transition-colors text-left", role === r.value && "bg-primary/5")}
+            {user?.isAdmin && (
+              <Link
+                href="/admin/users"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-muted/50 transition-colors text-xs font-medium text-foreground"
               >
-                <div className={cn("w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0", r.color)}>
-                  {r.avatar}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold text-foreground">{r.name}</p>
-                  <p className="text-[10px] text-muted-foreground">{r.label}</p>
-                </div>
-                {role === r.value && <ShieldCheck className="w-3.5 h-3.5 text-primary flex-shrink-0" />}
-              </button>
-            ))}
+                <ShieldCheck className="w-3.5 h-3.5 text-primary" />
+                Manage Users
+              </Link>
+            )}
+            <button
+              onClick={handleLogout}
+              className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-destructive/5 transition-colors text-xs font-medium text-destructive"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              Sign Out
+            </button>
           </div>
         </>
       )}
@@ -390,6 +402,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const [location] = useLocation();
   const [open, setOpen] = useState(false);
   const { can, role } = useRole();
+  const { user } = useAuth();
 
   const approvalsBadge = 0;
 
@@ -443,6 +456,13 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
               <NavItem href="/approvals" label="Approvals" icon={CheckSquare} active={location.startsWith("/approvals")} onNav={() => setOpen(false)} badge={approvalsBadge} />
             </div>
           )}
+
+          {user?.isAdmin && (
+            <div className="mb-3">
+              <p className="text-[10px] font-semibold text-sidebar-foreground/35 uppercase tracking-widest px-3 mb-1">Admin</p>
+              <NavItem href="/admin/users" label="Manage Users" icon={ShieldCheck} active={location.startsWith("/admin/users")} onNav={() => setOpen(false)} />
+            </div>
+          )}
         </nav>
 
         {/* Settings */}
@@ -455,9 +475,9 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         {/* Online enquiry alert */}
         <OnlineEnquiryAlert />
 
-        {/* Role switcher / profile */}
+        {/* User profile / logout */}
         <div className="border-t border-sidebar-border mt-2">
-          <RoleSwitcher />
+          <UserProfile />
         </div>
       </aside>
 

@@ -6,7 +6,9 @@
       "Bash(DATABASE_URL=\"postgresql://postgres:postgres@localhost:5432/realestateflow\" ../../node_modules/.bin/drizzle-kit push --config ./drizzle.config.js)",
       "PowerShell(Get-Process -Name \"node\" -ErrorAction SilentlyContinue | Where-Object { $_.Id -eq 18120 } | Stop-Process -Force -ErrorAction SilentlyContinue; Write-Host \"Stopped\")",
       "PowerShell(ls \"c:\\\\Users\\\\aksha\\\\OneDrive\\\\Desktop\\\\RealEstate_Flow\\\\RealEstate_Flow\\\\artifacts\\\\crm\" | ? { $_.Name -match \"tailwind|config|css\" })",
-      "Bash(pnpm --filter crm typecheck)"
+      "Bash(pnpm --filter crm typecheck)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }

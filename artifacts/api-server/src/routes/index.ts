@@ -1,5 +1,8 @@
 import { Router, type IRouter } from "express";
+import { authMiddleware } from "../middlewares/auth";
 import healthRouter from "./health";
+import authRouter from "./auth";
+import adminRouter from "./admin";
 import agentsRouter from "./agents";
 import leadsRouter from "./leads";
 import propertiesRouter from "./properties";
@@ -9,7 +12,15 @@ import viewingsRouter from "./viewings";
 
 const router: IRouter = Router();
 
+// Public routes (no auth required)
 router.use(healthRouter);
+router.use(authRouter);
+
+// Admin routes (auth + isAdmin enforced inside adminRouter)
+router.use(adminRouter);
+
+// Protected routes — require valid JWT
+router.use(authMiddleware as any);
 router.use(agentsRouter);
 router.use(leadsRouter);
 router.use(propertiesRouter);
