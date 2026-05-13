@@ -12,7 +12,7 @@ import { z } from "zod";
 import {
   Plus, Search, Trash2, Phone, MessageCircle, Users, Calendar,
   Clock, Home, TrendingUp, CheckCircle2, X, Download, Filter,
-  RefreshCw, ChevronRight,
+  RefreshCw, ChevronRight, Flame, Thermometer, Snowflake, AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { statusColor, stageLabel, formatCurrency, formatDate, LEAD_STATUSES, LEAD_SOURCES, PROPERTY_TYPES, scoreColor, cn } from "@/lib/utils";
 import { useRole } from "@/lib/role-context";
+import { useAuth } from "@/lib/auth-context";
 
 /* ─── Config ───────────────────────────────────────────────────────── */
 const SOURCE_COLORS: Record<string, string> = {
@@ -169,6 +170,21 @@ function ScheduleActivityDialog({ leadName, open, onClose }: {
   );
 }
 
+/* ─── SLA + Priority helpers ──────────────────────────────────────── */
+function slaStatus(lead: { status: string; createdAt: string }) {
+  if (lead.status !== "new") return null;
+  const ageHrs = (Date.now() - new Date(lead.createdAt).getTime()) / 3_600_000;
+  if (ageHrs < 1) return { label: "Fresh",   cls: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: null };
+  if (ageHrs < 2) return { label: "Pending", cls: "bg-amber-50 text-amber-700 border-amber-200",   icon: "warn" };
+  return { label: "OVERDUE", cls: "bg-red-100 text-red-700 border-red-300 font-bold", icon: "alert" };
+}
+
+function priorityInfo(score: number) {
+  if (score >= 75) return { label: "Hot",  cls: "bg-red-50 text-red-700 border-red-200",   Icon: Flame };
+  if (score >= 40) return { label: "Warm", cls: "bg-amber-50 text-amber-700 border-amber-200", Icon: Thermometer };
+  return { label: "Cold", cls: "bg-sky-50 text-sky-700 border-sky-200", Icon: Snowflake };
+}
+
 /* ─── Avatar ──────────────────────────────────────────────────────── */
 function LeadAvatar({ name, score }: { name: string; score: number }) {
   const initials = name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
@@ -192,6 +208,7 @@ export default function LeadsPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const { profile, role } = useRole();
+  const { user: authUser } = useAuth();
   const isSales = role === "sales";
   const [, setLocation] = useLocation();
 
@@ -228,14 +245,20 @@ export default function LeadsPage() {
   });
 
   function onSubmit(values: FormValues) {
+    // Sales: auto-assign to self using their linked agentId from auth
     const selfAgentId = isSales
-      ? (agents ?? []).find(a => a.name === profile.name)?.id ?? null
+      ? (authUser?.agentId ?? (agents ?? []).find(a => a.name === profile.name)?.id ?? null)
       : values.assignedTo ?? null;
 
     createLead.mutate({ data: { ...values, budget: values.budget ?? null, propertyType: values.propertyType ?? null, notes: values.notes ?? null, assignedTo: selfAgentId } });
   }
 
-  const allLeads = (leads ?? []).filter(l => isSales ? l.agentName === profile.name : true);
+  // Sales: filter to own leads only. Prefer agentId match; fall back to name match if agentId not linked yet.
+  const allLeads = (leads ?? []).filter(l => {
+    if (!isSales) return true;
+    if (authUser?.agentId) return l.assignedTo === authUser.agentId;
+    return l.agentName === profile.name;
+  });
   const today = new Date().toISOString().slice(0, 10);
   const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString();
 
@@ -248,6 +271,11 @@ export default function LeadsPage() {
     counts.all = allLeads.filter(l => l.status === "new").length;
     return counts;
   }, [allLeads]);
+
+  const overdueCount = useMemo(() =>
+    allLeads.filter(l => l.status === "new" && (Date.now() - new Date(l.createdAt).getTime()) > 2 * 3_600_000).length,
+    [allLeads]
+  );
 
   /* Apply tab filter */
   const tabFiltered = useMemo(() => {
@@ -335,6 +363,11 @@ export default function LeadsPage() {
                   {tabCounts[tab.id]}
                 </span>
               )}
+              {tab.id === "all" && overdueCount > 0 && (
+                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 flex items-center gap-0.5">
+                  <AlertTriangle className="w-2.5 h-2.5" />{overdueCount} overdue
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -416,8 +449,30 @@ export default function LeadsPage() {
                       <div className="flex items-center gap-2.5">
                         <LeadAvatar name={lead.name} score={lead.score} />
                         <div className="min-w-0">
-                          <p className="font-semibold text-foreground text-sm truncate">{lead.name}</p>
-                          <p className="text-[10px] text-muted-foreground truncate">{lead.email}</p>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className="font-semibold text-foreground text-sm truncate">{lead.name}</p>
+                            {(() => {
+                              const p = priorityInfo(lead.score);
+                              return (
+                                <span className={cn("inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold border flex-shrink-0", p.cls)}>
+                                  <p.Icon className="w-2.5 h-2.5" />{p.label}
+                                </span>
+                              );
+                            })()}
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <p className="text-[10px] text-muted-foreground truncate">{lead.email}</p>
+                            {(() => {
+                              const sla = slaStatus(lead);
+                              if (!sla) return null;
+                              return (
+                                <span className={cn("inline-flex items-center gap-0.5 px-1 py-0 rounded text-[9px] border flex-shrink-0", sla.cls)}>
+                                  {sla.icon === "alert" && <AlertTriangle className="w-2.5 h-2.5" />}
+                                  {sla.label}
+                                </span>
+                              );
+                            })()}
+                          </div>
                         </div>
                       </div>
                     </td>

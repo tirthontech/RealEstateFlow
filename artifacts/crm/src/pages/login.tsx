@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { Building2, Eye, EyeOff, LogIn } from "lucide-react";
+import { Eye, EyeOff, LogIn } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
 export default function LoginPage() {
@@ -31,11 +31,8 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-primary flex items-center justify-center shadow-lg mb-3">
-            <Building2 className="w-7 h-7 text-primary-foreground" />
-          </div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">EstateFlow</h1>
-          <p className="text-slate-400 text-sm mt-1">India's #1 Realty CRM</p>
+          <img src="/logo.png" alt="EstateFlow" className="h-16 w-auto object-contain mb-2" />
+          <p className="text-slate-400 text-sm">India's #1 Realty CRM</p>
         </div>
 
         {/* Card */}

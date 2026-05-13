@@ -38,7 +38,8 @@ function roleLabel(role: string) {
   return ROLE_PROFILES.find(r => r.value === role)?.label ?? role;
 }
 
-const EMPTY_FORM = { username: "", password: "", name: "", role: "sales" as UserRole, isAdmin: false };
+const AGENT_ROLES = ["manager", "sales", "broker"];
+const EMPTY_FORM = { username: "", password: "", name: "", email: "", role: "sales" as UserRole, isAdmin: false };
 
 export default function AdminUsersPage() {
   const { token, user: me } = useAuth();
@@ -49,7 +50,7 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [editUser, setEditUser] = useState<PlatformUser | null>(null);
-  const [form, setForm] = useState({ ...EMPTY_FORM });
+  const [form, setForm] = useState<typeof EMPTY_FORM>({ ...EMPTY_FORM });
   const [showPw, setShowPw] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -87,6 +88,9 @@ export default function AdminUsersPage() {
   async function handleCreate() {
     if (!form.username || !form.password || !form.name || !form.role) {
       toast({ title: "All fields are required", variant: "destructive" }); return;
+    }
+    if (AGENT_ROLES.includes(form.role) && !form.email) {
+      toast({ title: "Email is required for this role", variant: "destructive" }); return;
     }
     setSaving(true);
     try {
@@ -131,7 +135,7 @@ export default function AdminUsersPage() {
 
   function openEdit(u: PlatformUser) {
     setEditUser(u);
-    setForm({ username: u.username, password: "", name: u.name, role: u.role as UserRole, isAdmin: u.isAdmin });
+    setForm({ username: u.username, password: "", name: u.name, email: "", role: u.role as UserRole, isAdmin: u.isAdmin });
     setShowPw(false);
   }
 
@@ -291,8 +295,29 @@ export default function AdminUsersPage() {
                     <span className="text-xs font-medium text-foreground">Grant Admin rights</span>
                   </label>
                 </div>
+
+                {/* Email — required for operational roles when creating (creates agent profile) */}
+                {!editUser && AGENT_ROLES.includes(form.role) && (
+                  <div className="col-span-2">
+                    <label className="text-xs font-medium text-muted-foreground block mb-1">
+                      Work Email * <span className="text-[10px] text-primary">(creates agent profile)</span>
+                    </label>
+                    <input
+                      type="email"
+                      value={form.email}
+                      onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                      placeholder="firstname.lastname@company.com"
+                      className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    />
+                  </div>
+                )}
               </div>
 
+              {!editUser && AGENT_ROLES.includes(form.role) && (
+                <p className="text-[11px] text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+                  An agent profile will be created automatically. This person's leads, deals and site visits will be tracked under their profile.
+                </p>
+              )}
               {form.isAdmin && (
                 <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                   Admin users can create, edit and delete all platform accounts.

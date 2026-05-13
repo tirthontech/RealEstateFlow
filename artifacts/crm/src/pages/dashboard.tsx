@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/lib/auth-context";
 import {
   useGetDashboardStats, useGetDashboardPipeline, useGetRecentActivity,
   useGetLeadSources, useGetLeads, useGetAgents, getGetLeadsQueryKey,
@@ -13,7 +14,7 @@ import {
   Building2, Users, TrendingUp, GitBranch, Activity, ArrowUpRight, ArrowDownRight,
   AlertTriangle, CheckCircle2, Clock, Target, DollarSign, BarChart3, Layers,
   UserCheck, ChevronRight, Home, ShieldCheck, Zap, XCircle, TrendingDown, Calendar,
-  Pencil, Plus, CheckCheck, Phone, X, HandCoins, BarChart2,
+  Pencil, Plus, CheckCheck, Phone, X, HandCoins, BarChart2, Flame, Thermometer,
 } from "lucide-react";
 import { cn, formatCurrency, stageLabel, timeAgo, scoreColor, statusColor } from "@/lib/utils";
 import { Link } from "wouter";
@@ -189,6 +190,139 @@ const TODAY_VISITS = [
 ];
 
 const COLORS = ["#f59e0b", "#1e3a5f", "#10b981", "#8b5cf6", "#ef4444", "#3b82f6", "#f97316", "#06b6d4"];
+
+/* ─── TODAY'S FOCUS ───────────────────────────────────────────────────── */
+type TodayData = {
+  todayViewings: { id: number; time: string; status: string; leadName: string | null; propertyTitle: string | null; agentName: string | null }[];
+  overdueLeads:  { id: number; name: string; phone: string | null; source: string; createdAt: string }[];
+  hotLeads:      { id: number; name: string; phone: string | null; source: string; score: number; status: string; budget: number | null }[];
+};
+
+function TodaysFocusWidget() {
+  const { token } = useAuth();
+  const { data, isLoading } = useQuery<TodayData>({
+    queryKey: ["dashboard-today"],
+    queryFn: () => fetch("/api/dashboard/today", {
+      headers: { Authorization: `Bearer ${token}` },
+    }).then(r => r.json()),
+    enabled: !!token,
+    refetchInterval: 60_000,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-3 gap-3">
+        {[...Array(3)].map((_, i) => <div key={i} className="h-20 bg-muted rounded-xl animate-pulse" />)}
+      </div>
+    );
+  }
+  if (!data) return null;
+
+  const { todayViewings, overdueLeads, hotLeads } = data;
+
+  return (
+    <div className="space-y-3">
+      {/* 3-KPI summary strip */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-3.5 flex items-center gap-3">
+          <Calendar className="w-5 h-5 text-blue-600 flex-shrink-0" />
+          <div>
+            <p className="text-xl font-bold text-blue-700 leading-none">{todayViewings.length}</p>
+            <p className="text-[10px] font-semibold text-blue-600/80 uppercase tracking-wide mt-0.5">Today's Visits</p>
+          </div>
+        </div>
+        <div className={cn("border rounded-xl p-3.5 flex items-center gap-3", overdueLeads.length > 0 ? "bg-red-50 border-red-200" : "bg-emerald-50 border-emerald-200")}>
+          <AlertTriangle className={cn("w-5 h-5 flex-shrink-0", overdueLeads.length > 0 ? "text-red-600" : "text-emerald-600")} />
+          <div>
+            <p className={cn("text-xl font-bold leading-none", overdueLeads.length > 0 ? "text-red-700" : "text-emerald-700")}>{overdueLeads.length}</p>
+            <p className={cn("text-[10px] font-semibold uppercase tracking-wide mt-0.5", overdueLeads.length > 0 ? "text-red-600/80" : "text-emerald-600/80")}>Overdue Leads</p>
+          </div>
+        </div>
+        <div className="bg-orange-50 border border-orange-200 rounded-xl p-3.5 flex items-center gap-3">
+          <Flame className="w-5 h-5 text-orange-600 flex-shrink-0" />
+          <div>
+            <p className="text-xl font-bold text-orange-700 leading-none">{hotLeads.length}</p>
+            <p className="text-[10px] font-semibold text-orange-600/80 uppercase tracking-wide mt-0.5">Hot Leads</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Today's viewings list */}
+      {todayViewings.length > 0 && (
+        <Card>
+          <SectionTitle icon={Calendar} title="Today's Site Visits" sub={new Date().toLocaleDateString("en-IN", { weekday: "long", month: "long", day: "numeric" })} />
+          <div className="space-y-2">
+            {todayViewings.map(v => (
+              <div key={v.id} className="flex items-center gap-3 p-2.5 rounded-lg border border-border hover:bg-muted/30 transition-colors">
+                <span className="text-xs font-bold text-primary whitespace-nowrap flex-shrink-0 w-14">{v.time}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-foreground truncate">{v.leadName ?? "—"}</p>
+                  <p className="text-xs text-muted-foreground truncate">{v.propertyTitle ?? "—"}{v.agentName ? ` · ${v.agentName}` : ""}</p>
+                </div>
+                <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 whitespace-nowrap",
+                  v.status === "confirmed" ? "bg-green-100 text-green-700" : v.status === "completed" ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700")}>
+                  {v.status.charAt(0).toUpperCase() + v.status.slice(1)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Overdue leads */}
+      {overdueLeads.length > 0 && (
+        <Card className="border-red-200 bg-red-50/20">
+          <SectionTitle icon={AlertTriangle} title="Overdue Leads — Act Now" sub="New leads older than 2 hours without contact · SLA breach" />
+          <div className="space-y-2">
+            {overdueLeads.map(l => {
+              const ageHrs = ((Date.now() - new Date(l.createdAt).getTime()) / 3_600_000).toFixed(1);
+              return (
+                <div key={l.id} className="flex items-center gap-3 p-2.5 rounded-lg border border-red-100 bg-card">
+                  <div className="w-7 h-7 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+                    {l.name.split(" ").map((w: string) => w[0]).join("").slice(0,2).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-foreground truncate">{l.name}</p>
+                    <p className="text-xs text-muted-foreground truncate capitalize">{l.source} · <span className="text-red-600 font-medium">{ageHrs}h ago</span></p>
+                  </div>
+                  <Link href={`/leads/${l.id}`}
+                    className="text-xs px-2.5 py-1.5 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors flex-shrink-0 whitespace-nowrap">
+                    Follow Up
+                  </Link>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {/* Hot leads */}
+      {hotLeads.length > 0 && (
+        <Card className="border-orange-200 bg-orange-50/20">
+          <SectionTitle icon={Flame} title="Hot Leads — High Intent" sub="Score ≥75 · Need a call or visit scheduled today" />
+          <div className="space-y-2">
+            {hotLeads.map(l => (
+              <div key={l.id} className="flex items-center gap-3 p-2.5 rounded-lg border border-orange-100 bg-card">
+                <div className="w-7 h-7 rounded-full bg-orange-100 text-orange-700 flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+                  {l.name.split(" ").map((w: string) => w[0]).join("").slice(0,2).toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-foreground truncate">{l.name}</p>
+                  <p className="text-xs text-muted-foreground truncate capitalize">{l.source} · Score: <span className="font-bold text-orange-700">{l.score}</span></p>
+                </div>
+                {l.budget && <span className="text-xs font-semibold text-foreground whitespace-nowrap flex-shrink-0">{formatCurrency(l.budget)}</span>}
+                <Link href={`/leads/${l.id}`}
+                  className="text-xs px-2.5 py-1.5 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700 transition-colors flex-shrink-0 whitespace-nowrap">
+                  View
+                </Link>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
 
 /* ─── INVENTORY ───────────────────────────────────────────────────────── */
 function InventoryTab() {
@@ -1585,6 +1719,9 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
+
+      {/* Today's Focus — real-time site visits, overdue leads, hot leads (all roles except CFO) */}
+      {!isCFO && <TodaysFocusWidget />}
 
       {/* Content */}
       {isOwnerOrManager && tab === "inventory" && <InventoryTab />}

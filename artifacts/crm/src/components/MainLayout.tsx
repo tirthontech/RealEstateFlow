@@ -420,14 +420,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         open ? "translate-x-0" : "-translate-x-full",
       )}>
         {/* Logo */}
-        <div className="flex items-center gap-2.5 px-5 py-4 border-b border-sidebar-border">
-          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-sidebar-primary shadow-sm">
-            <Building2 className="w-4 h-4 text-sidebar-primary-foreground" />
-          </div>
-          <div>
-            <span className="text-sidebar-foreground font-bold text-sm tracking-tight block">EstateFlow</span>
-            <span className="text-sidebar-foreground/40 text-[10px]">India's #1 Realty CRM</span>
-          </div>
+        <div className="flex items-center gap-2.5 px-4 py-3 border-b border-sidebar-border">
+          <img src="/logo.png" alt="EstateFlow" className="h-9 w-auto object-contain" />
         </div>
 
         {/* Nav */}
@@ -487,9 +481,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           <button data-testid="button-mobile-menu" onClick={() => setOpen(true)} className="p-1.5 rounded-md hover:bg-muted lg:hidden flex-shrink-0">
             <Menu className="w-5 h-5" />
           </button>
-          <div className="flex items-center gap-2 lg:hidden mr-2">
-            <Building2 className="w-4 h-4 text-primary" />
-            <span className="font-semibold text-sm">EstateFlow</span>
+          <div className="flex items-center lg:hidden mr-2">
+            <img src="/logo.png" alt="EstateFlow" className="h-7 w-auto object-contain" />
           </div>
           <div className="flex-1 flex justify-center lg:justify-start">
             <GlobalSearch />
