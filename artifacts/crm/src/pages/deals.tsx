@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { useRole } from "@/lib/role-context";
 import { statusColor, stageLabel, formatCurrency, DEAL_STAGES } from "@/lib/utils";
 
 const STAGES = DEAL_STAGES as unknown as string[];
@@ -115,11 +116,18 @@ export default function DealsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { role, profile } = useRole();
+  const isSales = role === "sales";
 
-  const { data: deals, isLoading } = useGetDeals({}, { query: { queryKey: getGetDealsQueryKey() } });
+  const { data: allDeals, isLoading } = useGetDeals({}, { query: { queryKey: getGetDealsQueryKey() } });
   const { data: leads } = useGetLeads({}, { query: { queryKey: ["leads"] } });
   const { data: properties } = useGetProperties({}, { query: { queryKey: ["properties"] } });
   const { data: agents } = useGetAgents();
+
+  // Salesperson sees only their own deals
+  const deals = isSales
+    ? (allDeals ?? []).filter(d => d.agentName === profile.name)
+    : allDeals;
 
   const createDeal = useCreateDeal({
     mutation: {
@@ -161,12 +169,17 @@ export default function DealsPage() {
   });
 
   function onSubmit(values: FormValues) {
+    // For salesperson, auto-assign to their own agent record by name match
+    const selfAgentId = isSales
+      ? (agents ?? []).find(a => a.name === profile.name)?.id ?? null
+      : values.agentId ?? null;
+
     createDeal.mutate({
       data: {
         ...values,
         leadId: values.leadId ?? null,
         propertyId: values.propertyId ?? null,
-        agentId: values.agentId ?? null,
+        agentId: selfAgentId,
         closingDate: values.closingDate ?? null,
         notes: values.notes ?? null,
       },
@@ -186,7 +199,9 @@ export default function DealsPage() {
     <div className="p-6 space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Deal Pipeline</h1>
+          <h1 className="text-2xl font-bold text-foreground">
+            {isSales ? "My Deal Pipeline" : "Deal Pipeline"}
+          </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             {(deals ?? []).length} deals &middot; {formatCurrency(totalPipeline)} pipeline value
           </p>
@@ -250,14 +265,16 @@ export default function DealsPage() {
                     </Select><FormMessage />
                   </FormItem>
                 )} />
-                <FormField control={form.control} name="agentId" render={({ field }) => (
-                  <FormItem><FormLabel>Agent</FormLabel>
-                    <Select value={field.value?.toString() ?? ""} onValueChange={(v) => field.onChange(Number(v))}>
-                      <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
-                      <SelectContent>{(agents ?? []).map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}</SelectContent>
-                    </Select><FormMessage />
-                  </FormItem>
-                )} />
+                {!isSales && (
+                  <FormField control={form.control} name="agentId" render={({ field }) => (
+                    <FormItem><FormLabel>Assign Agent</FormLabel>
+                      <Select value={field.value?.toString() ?? ""} onValueChange={(v) => field.onChange(Number(v))}>
+                        <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+                        <SelectContent>{(agents ?? []).map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}</SelectContent>
+                      </Select><FormMessage />
+                    </FormItem>
+                  )} />
+                )}
                 <FormField control={form.control} name="closingDate" render={({ field }) => (
                   <FormItem><FormLabel>Expected Close</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
                 )} />

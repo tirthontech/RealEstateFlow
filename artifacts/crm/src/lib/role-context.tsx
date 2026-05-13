@@ -14,7 +14,7 @@ export const ROLE_NAV_ACCESS: Record<UserRole, string[]> = {
   owner:    ["dashboard", "leads", "properties", "deals", "agents", "viewings", "whatsapp", "analytics", "commission", "integrations", "settings", "approvals", "activities"],
   cfo:      ["dashboard", "analytics", "commission", "settings"],
   manager:  ["dashboard", "leads", "properties", "deals", "agents", "viewings", "whatsapp", "analytics", "commission", "settings", "approvals", "activities"],
-  sales:    ["dashboard", "properties", "activities"],
+  sales:    ["dashboard", "leads", "properties", "deals", "activities"],
   broker:   ["dashboard", "leads", "properties", "commission", "activities"],
 };
 

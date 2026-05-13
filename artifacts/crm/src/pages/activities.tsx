@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useGetLeads, useGetAgents, getGetLeadsQueryKey } from "@workspace/api-client-react";
+import { useGetLeads, useGetAgents, useGetProperties, getGetLeadsQueryKey, getGetPropertiesQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Phone, Home, TrendingUp, CheckCircle2, Clock, Search, Plus, Download,
@@ -121,10 +121,18 @@ function ScheduleDialog({ open, onClose, onSave, customers }: {
   onSave: (act: Omit<Activity, "id">) => void;
   customers: string[];
 }) {
-  const { profile } = useRole();
+  const { profile, role } = useRole();
+  const isSales = role === "sales";
+  const canAssignOthers = role === "owner" || role === "manager";
+
+  const { data: agents } = useGetAgents();
+  const { data: properties } = useGetProperties({}, { query: { queryKey: getGetPropertiesQueryKey({}) } });
+  const propertyTitles = (properties ?? []).map(p => p.title);
+  const firstProperty = propertyTitles[0] ?? PROJECT_OPTIONS[0];
+
   const [form, setForm] = useState({
     customer: "", phone: "", employee: profile.name, activityType: "phone" as ActivityType,
-    source: "Website", project: PROJECT_OPTIONS[0], activityDate: todayStr(),
+    source: "Website", project: firstProperty, activityDate: todayStr(),
     activityTime: "10:00 AM", lastRemark: "", budget: "",
   });
 
@@ -136,7 +144,7 @@ function ScheduleDialog({ open, onClose, onSave, customers }: {
       project: form.project, activityDate: form.activityDate, activityTime: form.activityTime,
       lastRemark: form.lastRemark, status: "pending", budget: form.budget ? Number(form.budget) : undefined,
     });
-    setForm({ customer: "", phone: "", employee: profile.name, activityType: "phone", source: "Website", project: PROJECT_OPTIONS[0], activityDate: todayStr(), activityTime: "10:00 AM", lastRemark: "", budget: "" });
+    setForm({ customer: "", phone: "", employee: profile.name, activityType: "phone", source: "Website", project: firstProperty, activityDate: todayStr(), activityTime: "10:00 AM", lastRemark: "", budget: "" });
     onClose();
   }
 
@@ -165,9 +173,18 @@ function ScheduleDialog({ open, onClose, onSave, customers }: {
           </div>
 
           <div>
-            <label className="text-xs font-medium text-muted-foreground block mb-1">Assigned To</label>
-            <input value={form.employee} onChange={e => setForm(p => ({ ...p, employee: e.target.value }))}
-              className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/30" />
+            <label className="text-xs font-medium text-muted-foreground block mb-1">
+              Assigned To {isSales && <span className="text-primary">(you)</span>}
+            </label>
+            {canAssignOthers ? (
+              <select value={form.employee} onChange={e => setForm(p => ({ ...p, employee: e.target.value }))}
+                className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/30">
+                {(agents ?? []).map(a => <option key={a.id} value={a.name}>{a.name}</option>)}
+              </select>
+            ) : (
+              <input value={form.employee} readOnly
+                className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-muted/50 text-muted-foreground cursor-not-allowed" />
+            )}
           </div>
 
           <div className="col-span-2">
@@ -192,10 +209,12 @@ function ScheduleDialog({ open, onClose, onSave, customers }: {
           </div>
 
           <div>
-            <label className="text-xs font-medium text-muted-foreground block mb-1">Project</label>
+            <label className="text-xs font-medium text-muted-foreground block mb-1">Property / Project</label>
             <select value={form.project} onChange={e => setForm(p => ({ ...p, project: e.target.value }))}
               className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/30">
-              {PROJECT_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
+              {(propertyTitles.length > 0 ? propertyTitles : PROJECT_OPTIONS).map(p => (
+                <option key={p} value={p}>{p}</option>
+              ))}
             </select>
           </div>
 
