@@ -2,7 +2,7 @@ services:
   - type: web
     name: realestate-flow-api
     runtime: node
-    buildCommand: npx pnpm@10 install --frozen-lockfile && cd artifacts/api-server && npx pnpm@10 run build
+    buildCommand: npx pnpm@10 install --frozen-lockfile && cd lib/db && npx drizzle-kit push --config ./drizzle.config.cjs --force && cd ../.. && cd artifacts/api-server && npx pnpm@10 run build
     startCommand: node --enable-source-maps artifacts/api-server/dist/index.mjs
     envVars:
       - key: NODE_ENV
