@@ -200,13 +200,18 @@ type TodayData = {
 
 function TodaysFocusWidget() {
   const { token } = useAuth();
-  const { data, isLoading } = useQuery<TodayData>({
+  const { data, isLoading, isError } = useQuery<TodayData>({
     queryKey: ["dashboard-today"],
-    queryFn: () => fetch("/api/dashboard/today", {
-      headers: { Authorization: `Bearer ${token}` },
-    }).then(r => r.json()),
+    queryFn: async () => {
+      const r = await fetch("/api/dashboard/today", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    },
     enabled: !!token,
     refetchInterval: 60_000,
+    retry: 1,
   });
 
   if (isLoading) {
@@ -216,9 +221,11 @@ function TodaysFocusWidget() {
       </div>
     );
   }
-  if (!data) return null;
+  if (isError || !data) return null;
 
-  const { todayViewings, overdueLeads, hotLeads } = data;
+  const todayViewings = data.todayViewings ?? [];
+  const overdueLeads  = data.overdueLeads  ?? [];
+  const hotLeads      = data.hotLeads      ?? [];
 
   return (
     <div className="space-y-3">
