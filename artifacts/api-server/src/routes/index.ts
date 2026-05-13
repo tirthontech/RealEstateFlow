@@ -11,6 +11,7 @@ import dashboardRouter from "./dashboard";
 import viewingsRouter from "./viewings";
 import unitsRouter from "./units";
 import notificationsRouter from "./notifications";
+import activitiesRouter from "./activities";
 
 const router: IRouter = Router();
 
@@ -31,5 +32,6 @@ router.use(dashboardRouter);
 router.use(viewingsRouter);
 router.use(unitsRouter);
 router.use(notificationsRouter);
+router.use(activitiesRouter);
 
 export default router;

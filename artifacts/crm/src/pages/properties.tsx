@@ -796,7 +796,7 @@ export default function PropertiesPage() {
                 )} />
                 <FormField control={form.control} name="agentId" render={({ field }) => (
                   <FormItem><FormLabel>Project Manager</FormLabel>
-                    <Select value={field.value?.toString() ?? ""} onValueChange={(v) => field.onChange(Number(v))}>
+                    <Select value={field.value?.toString() ?? ""} onValueChange={(v) => field.onChange(v ? Number(v) : undefined)}>
                       <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
                       <SelectContent>{(agents ?? []).map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}</SelectContent>
                     </Select><FormMessage />

@@ -774,7 +774,7 @@ export default function LeadsPage() {
                 {!isSales && (
                   <FormField control={form.control} name="assignedTo" render={({ field }) => (
                     <FormItem className="col-span-2"><FormLabel>Assign to Agent</FormLabel>
-                      <Select value={field.value?.toString() ?? ""} onValueChange={v => field.onChange(Number(v))}>
+                      <Select value={field.value?.toString() ?? ""} onValueChange={v => field.onChange(v ? Number(v) : undefined)}>
                         <SelectTrigger data-testid="select-lead-agent"><SelectValue placeholder="Unassigned" /></SelectTrigger>
                         <SelectContent>{(agents ?? []).map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}</SelectContent>
                       </Select><FormMessage />

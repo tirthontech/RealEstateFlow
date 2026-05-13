@@ -3,12 +3,13 @@ import { useGetLeads, useGetAgents, useGetProperties, getGetLeadsQueryKey, getGe
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Phone, Home, TrendingUp, CheckCircle2, Clock, Search, Plus, Download,
-  Calendar, MessageSquare, ChevronRight, X, ArrowUpDown, MessageCircle,
+  Calendar, MessageSquare, ChevronRight, X, ArrowUpDown, MessageCircle, Loader2,
 } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { useRole } from "@/lib/role-context";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
+import { useActivities, type ScheduledActivity, type CreateActivityInput, type UpdateActivityInput } from "@/lib/use-activities";
 
 /* ─── Types ───────────────────────────────────────────────────────────── */
 type ActivityType =
@@ -31,18 +32,19 @@ interface Activity {
   lastRemark: string;
   status: ActivityStatus;
   budget?: number;
+  agentId?: number | null;
 }
 
 /* ─── Config ──────────────────────────────────────────────────────────── */
 const ACTIVITY_TYPES: { id: ActivityType; label: string; color: string; icon: React.ElementType }[] = [
-  { id: "fresh_lead",       label: "Fresh Leads",       color: "bg-blue-100 text-blue-700 border-blue-200",     icon: Plus },
-  { id: "phone",            label: "Phone",             color: "bg-purple-100 text-purple-700 border-purple-200", icon: Phone },
-  { id: "site_visit_follow",label: "Site Visit Follow", color: "bg-cyan-100 text-cyan-700 border-cyan-200",      icon: MessageSquare },
-  { id: "site_visit",       label: "Site Visit",        color: "bg-teal-100 text-teal-700 border-teal-200",      icon: Home },
-  { id: "nego_followup",    label: "Nego Followup",     color: "bg-orange-100 text-orange-700 border-orange-200",icon: Clock },
-  { id: "negotiation",      label: "Negotiation",       color: "bg-amber-100 text-amber-700 border-amber-200",   icon: TrendingUp },
-  { id: "sale",             label: "Sale",              color: "bg-green-100 text-green-700 border-green-200",   icon: CheckCircle2 },
-  { id: "sale_done",        label: "Sale Done",         color: "bg-emerald-100 text-emerald-700 border-emerald-200", icon: CheckCircle2 },
+  { id: "fresh_lead",        label: "Fresh Leads",       color: "bg-blue-100 text-blue-700 border-blue-200",      icon: Plus },
+  { id: "phone",             label: "Phone",             color: "bg-purple-100 text-purple-700 border-purple-200", icon: Phone },
+  { id: "site_visit_follow", label: "Site Visit Follow", color: "bg-cyan-100 text-cyan-700 border-cyan-200",       icon: MessageSquare },
+  { id: "site_visit",        label: "Site Visit",        color: "bg-teal-100 text-teal-700 border-teal-200",       icon: Home },
+  { id: "nego_followup",     label: "Nego Followup",     color: "bg-orange-100 text-orange-700 border-orange-200", icon: Clock },
+  { id: "negotiation",       label: "Negotiation",       color: "bg-amber-100 text-amber-700 border-amber-200",    icon: TrendingUp },
+  { id: "sale",              label: "Sale",              color: "bg-green-100 text-green-700 border-green-200",    icon: CheckCircle2 },
+  { id: "sale_done",         label: "Sale Done",         color: "bg-emerald-100 text-emerald-700 border-emerald-200", icon: CheckCircle2 },
 ];
 
 const TIME_TABS = [
@@ -58,36 +60,29 @@ const TIME_TABS = [
 const SOURCE_OPTIONS = ["Website", "Google", "99acres", "MagicBricks", "Housing", "Facebook", "Referral", "Phone", "Walk-in", "WhatsApp", "IVR", "Other"];
 const PROJECT_OPTIONS = ["Prestige Lakeside", "Godrej Summit", "DLF Cybercity", "Sobha Royal Crest"];
 
-/* ─── Mock data ───────────────────────────────────────────────────────── */
+/* ─── Helpers ─────────────────────────────────────────────────────────── */
 function todayStr() { return new Date().toISOString().slice(0, 10); }
 function tomorrowStr() { return new Date(Date.now() + 86400000).toISOString().slice(0, 10); }
-function daysAgo(n: number) { return new Date(Date.now() - n * 86400000).toISOString().slice(0, 10); }
-function daysAhead(n: number) { return new Date(Date.now() + n * 86400000).toISOString().slice(0, 10); }
 
-const INITIAL_ACTIVITIES: Activity[] = [
-  { id: 1,  customer: "Amit Jain",          phone: "9831...",  employee: "Riya Sharma",  createdDate: daysAgo(10), activityType: "site_visit",        source: "99acres",    project: "Godrej Summit",       activityDate: todayStr(),      activityTime: "10:00 AM", lastRemark: "Interested in 3BHK", status: "pending",   budget: 85_00_000 },
-  { id: 2,  customer: "Sunita Sharma",       phone: "7304...",  employee: "Arjun Mehta",  createdDate: daysAgo(5),  activityType: "sale",              source: "Google",     project: "Prestige Lakeside",   activityDate: todayStr(),      activityTime: "12:30 PM", lastRemark: "Ready to finalize",  status: "pending",   budget: 1_20_00_000 },
-  { id: 3,  customer: "Vikram Singh",        phone: "9820...",  employee: "Pooja Nair",   createdDate: daysAgo(3),  activityType: "fresh_lead",        source: "Facebook",   project: "Sobha Royal Crest",   activityDate: todayStr(),      activityTime: "02:00 PM", lastRemark: "New inquiry",        status: "pending",   budget: 65_00_000 },
-  { id: 4,  customer: "Deepa Nair",          phone: "9695...",  employee: "Rahul Gupta",  createdDate: daysAgo(8),  activityType: "negotiation",       source: "Website",    project: "DLF Cybercity",       activityDate: todayStr(),      activityTime: "04:00 PM", lastRemark: "Price negotiation",  status: "pending",   budget: 2_50_00_000 },
-  { id: 5,  customer: "Meera Patel",         phone: "9154...",  employee: "Sneha Joshi",  createdDate: daysAgo(2),  activityType: "phone",             source: "MagicBricks",project: "Prestige Lakeside",   activityDate: todayStr(),      activityTime: "11:00 AM", lastRemark: "Call back requested",status: "pending",   budget: 90_00_000 },
-  { id: 6,  customer: "Sanjay Verma",        phone: "9441...",  employee: "Riya Sharma",  createdDate: daysAgo(1),  activityType: "site_visit",        source: "Google",     project: "Godrej Summit",       activityDate: tomorrowStr(),   activityTime: "09:30 AM", lastRemark: "Site visit confirmed",status:"pending",   budget: 1_10_00_000 },
-  { id: 7,  customer: "Priya Kapoor",        phone: "9290...",  employee: "Arjun Mehta",  createdDate: daysAgo(4),  activityType: "site_visit_follow", source: "Housing",    project: "Sobha Royal Crest",   activityDate: tomorrowStr(),   activityTime: "11:00 AM", lastRemark: "Follow-up call done",status: "pending",   budget: 78_00_000 },
-  { id: 8,  customer: "Ravi Kumar",          phone: "8073...",  employee: "Pooja Nair",   createdDate: daysAgo(15), activityType: "negotiation",       source: "Referral",   project: "DLF Cybercity",       activityDate: tomorrowStr(),   activityTime: "03:00 PM", lastRemark: "Final offer made",   status: "pending",   budget: 3_00_00_000 },
-  { id: 9,  customer: "Kavitha Reddy",       phone: "7757...",  employee: "Rahul Gupta",  createdDate: daysAgo(6),  activityType: "nego_followup",     source: "Website",    project: "Prestige Lakeside",   activityDate: daysAhead(3),    activityTime: "10:00 AM", lastRemark: "Needs time to decide",status:"pending",   budget: 95_00_000 },
-  { id: 10, customer: "Harish Babu",         phone: "9666...",  employee: "Riya Sharma",  createdDate: daysAgo(20), activityType: "sale_done",         source: "99acres",    project: "Godrej Summit",       activityDate: daysAgo(2),      activityTime: "02:00 PM", lastRemark: "Deal closed! ₹1.1Cr",status: "completed", budget: 1_10_00_000 },
-  { id: 11, customer: "Anil Sharma",         phone: "9820...",  employee: "Sneha Joshi",  createdDate: daysAgo(25), activityType: "sale_done",         source: "Google",     project: "Prestige Lakeside",   activityDate: daysAgo(5),      activityTime: "11:00 AM", lastRemark: "Registry done",      status: "completed", budget: 85_00_000 },
-  { id: 12, customer: "Fatima Sheikh",       phone: "8459...",  employee: "Pooja Nair",   createdDate: daysAgo(7),  activityType: "phone",             source: "Facebook",   project: "Sobha Royal Crest",   activityDate: daysAgo(3),      activityTime: "12:00 PM", lastRemark: "Not answering",      status: "pending",   budget: 60_00_000 },
-  { id: 13, customer: "Gopal Rao",           phone: "9781...",  employee: "Arjun Mehta",  createdDate: daysAgo(12), activityType: "site_visit",        source: "Walk-in",    project: "DLF Cybercity",       activityDate: daysAgo(4),      activityTime: "03:30 PM", lastRemark: "Will decide this week",status:"pending",  budget: 2_00_00_000 },
-  { id: 14, customer: "Latha Krishnan",      phone: "9346...",  employee: "Rahul Gupta",  createdDate: daysAgo(9),  activityType: "fresh_lead",        source: "IVR",        project: "Prestige Lakeside",   activityDate: daysAhead(5),    activityTime: "10:30 AM", lastRemark: "IVR lead - new",     status: "pending",   budget: 70_00_000 },
-  { id: 15, customer: "Mohan Das",           phone: "8026...",  employee: "Riya Sharma",  createdDate: daysAgo(18), activityType: "sale",              source: "Google",     project: "Godrej Summit",       activityDate: daysAhead(2),    activityTime: "01:00 PM", lastRemark: "Loan approved, ready",status:"pending",  budget: 1_30_00_000 },
-  { id: 16, customer: "Radha Menon",         phone: "9966...",  employee: "Sneha Joshi",  createdDate: daysAgo(3),  activityType: "site_visit_follow", source: "WhatsApp",   project: "Sobha Royal Crest",   activityDate: daysAhead(7),    activityTime: "11:30 AM", lastRemark: "Wants sea-facing unit",status:"pending",  budget: 1_50_00_000 },
-  { id: 17, customer: "Suresh Nair",         phone: "9845...",  employee: "Arjun Mehta",  createdDate: daysAgo(30), activityType: "nego_followup",     source: "Referral",   project: "DLF Cybercity",       activityDate: daysAgo(10),     activityTime: "02:30 PM", lastRemark: "Dropped — budget issue",status:"pending", budget: 1_80_00_000 },
-  { id: 18, customer: "Poonam Gupta",        phone: "9123...",  employee: "Pooja Nair",   createdDate: daysAgo(1),  activityType: "phone",             source: "99acres",    project: "Prestige Lakeside",   activityDate: daysAhead(1),    activityTime: "09:00 AM", lastRemark: "Scheduled callback",  status: "pending",  budget: 88_00_000 },
-  { id: 19, customer: "Kiran Bhat",          phone: "9234...",  employee: "Rahul Gupta",  createdDate: daysAgo(22), activityType: "sale_done",         source: "MagicBricks",project: "Sobha Royal Crest",   activityDate: daysAgo(8),      activityTime: "03:00 PM", lastRemark: "Payment received",    status: "completed", budget: 95_00_000 },
-  { id: 20, customer: "Am Builders Dev",     phone: "8026...",  employee: "Riya Sharma",  createdDate: daysAgo(14), activityType: "sale",              source: "Google",     project: "Godrej Summit",       activityDate: todayStr(),      activityTime: "12:19 PM", lastRemark: "Commercial deal pending",status:"pending", budget: 5_00_00_000 },
-];
+function toActivity(a: ScheduledActivity): Activity {
+  return {
+    id: a.id,
+    customer: a.customer,
+    phone: a.phone ?? "",
+    employee: a.employeeName ?? "",
+    createdDate: a.createdAt.slice(0, 10),
+    activityType: (a.activityType as ActivityType) ?? "phone",
+    source: a.source ?? "",
+    project: a.project ?? "",
+    activityDate: a.activityDate,
+    activityTime: a.activityTime ?? "",
+    lastRemark: a.lastRemark ?? "",
+    status: (a.status as ActivityStatus) ?? "pending",
+    budget: a.budget != null ? Number(a.budget) : undefined,
+    agentId: a.agentId,
+  };
+}
 
-/* ─── Helper functions ───────────────────────────────────────────────── */
 function getTimeCategory(act: Activity): string {
   const today = todayStr();
   const tomorrow = tomorrowStr();
@@ -118,7 +113,7 @@ function exportCSV(activities: Activity[]) {
 /* ─── Schedule Activity Dialog ───────────────────────────────────────── */
 function ScheduleDialog({ open, onClose, onSave, customers }: {
   open: boolean; onClose: () => void;
-  onSave: (act: Omit<Activity, "id">) => void;
+  onSave: (input: CreateActivityInput) => Promise<void>;
   customers: string[];
 }) {
   const { profile, role } = useRole();
@@ -130,22 +125,37 @@ function ScheduleDialog({ open, onClose, onSave, customers }: {
   const propertyTitles = (properties ?? []).map(p => p.title);
   const firstProperty = propertyTitles[0] ?? PROJECT_OPTIONS[0];
 
+  const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({
-    customer: "", phone: "", employee: profile.name, activityType: "phone" as ActivityType,
+    customer: "", phone: "", agentId: "" as string,
+    activityType: "phone" as ActivityType,
     source: "Website", project: firstProperty, activityDate: todayStr(),
     activityTime: "10:00 AM", lastRemark: "", budget: "",
   });
 
-  function handleSave() {
-    if (!form.customer) return;
-    onSave({
-      customer: form.customer, phone: form.phone, employee: form.employee,
-      createdDate: todayStr(), activityType: form.activityType, source: form.source,
-      project: form.project, activityDate: form.activityDate, activityTime: form.activityTime,
-      lastRemark: form.lastRemark, status: "pending", budget: form.budget ? Number(form.budget) : undefined,
-    });
-    setForm({ customer: "", phone: "", employee: profile.name, activityType: "phone", source: "Website", project: firstProperty, activityDate: todayStr(), activityTime: "10:00 AM", lastRemark: "", budget: "" });
-    onClose();
+  async function handleSave() {
+    if (!form.customer || submitting) return;
+    setSubmitting(true);
+    try {
+      const selectedAgent = form.agentId ? (agents ?? []).find(a => a.id === Number(form.agentId)) : null;
+      await onSave({
+        activityType: form.activityType,
+        customer: form.customer,
+        phone: form.phone || null,
+        employeeName: selectedAgent?.name ?? (isSales ? profile.name : null),
+        agentId: form.agentId ? Number(form.agentId) : null,
+        source: form.source || null,
+        project: form.project || null,
+        activityDate: form.activityDate,
+        activityTime: form.activityTime || null,
+        lastRemark: form.lastRemark || null,
+        budget: form.budget ? Number(form.budget) : null,
+      });
+      setForm({ customer: "", phone: "", agentId: "", activityType: "phone", source: "Website", project: firstProperty, activityDate: todayStr(), activityTime: "10:00 AM", lastRemark: "", budget: "" });
+      onClose();
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   if (!open) return null;
@@ -177,12 +187,13 @@ function ScheduleDialog({ open, onClose, onSave, customers }: {
               Assigned To {isSales && <span className="text-primary">(you)</span>}
             </label>
             {canAssignOthers ? (
-              <select value={form.employee} onChange={e => setForm(p => ({ ...p, employee: e.target.value }))}
+              <select value={form.agentId} onChange={e => setForm(p => ({ ...p, agentId: e.target.value }))}
                 className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/30">
-                {(agents ?? []).map(a => <option key={a.id} value={a.name}>{a.name}</option>)}
+                <option value="">— Select agent —</option>
+                {(agents ?? []).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
               </select>
             ) : (
-              <input value={form.employee} readOnly
+              <input value={profile.name} readOnly
                 className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-muted/50 text-muted-foreground cursor-not-allowed" />
             )}
           </div>
@@ -247,11 +258,12 @@ function ScheduleDialog({ open, onClose, onSave, customers }: {
         </div>
 
         <div className="flex gap-2 pt-1">
-          <button disabled={!form.customer} onClick={handleSave}
-            className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50">
+          <button disabled={!form.customer || submitting} onClick={handleSave}
+            className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2">
+            {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
             Schedule Activity
           </button>
-          <button onClick={onClose} className="flex-1 py-2 border border-border rounded-lg text-sm font-medium hover:bg-muted/50 transition-colors">Cancel</button>
+          <button onClick={onClose} disabled={submitting} className="flex-1 py-2 border border-border rounded-lg text-sm font-medium hover:bg-muted/50 transition-colors">Cancel</button>
         </div>
       </div>
     </div>
@@ -285,9 +297,9 @@ function RemarkCell({ activity, onUpdate }: { activity: Activity; onUpdate: (id:
 
 /* ─── Status Dropdown ────────────────────────────────────────────────── */
 const STATUS_OPTIONS: { value: ActivityStatus; label: string; color: string }[] = [
-  { value: "pending",   label: "Pending",     color: "bg-amber-100 text-amber-700 border-amber-200" },
-  { value: "completed", label: "Done",        color: "bg-green-100 text-green-700 border-green-200" },
-  { value: "cancelled", label: "Cancelled",   color: "bg-red-100 text-red-600 border-red-200" },
+  { value: "pending",   label: "Pending",   color: "bg-amber-100 text-amber-700 border-amber-200" },
+  { value: "completed", label: "Done",      color: "bg-green-100 text-green-700 border-green-200" },
+  { value: "cancelled", label: "Cancelled", color: "bg-red-100 text-red-600 border-red-200" },
 ];
 
 function StatusToggle({ activity, onUpdate }: { activity: Activity; onUpdate: (id: number, remark: string, status: ActivityStatus) => void }) {
@@ -327,6 +339,19 @@ function StatusToggle({ activity, onUpdate }: { activity: Activity; onUpdate: (i
   );
 }
 
+/* ─── Skeleton row ───────────────────────────────────────────────────── */
+function SkeletonRow() {
+  return (
+    <tr className="animate-pulse">
+      {Array.from({ length: 10 }).map((_, i) => (
+        <td key={i} className="px-3 py-3">
+          <div className="h-3 bg-muted rounded w-full max-w-[80px]" />
+        </td>
+      ))}
+    </tr>
+  );
+}
+
 /* ─── Main Page ──────────────────────────────────────────────────────── */
 export default function ActivitiesPage() {
   const { profile, role } = useRole();
@@ -334,7 +359,10 @@ export default function ActivitiesPage() {
   const canSendWhatsApp = role === "owner" || role === "manager";
   const { toast } = useToast();
   const [, setLocation] = useLocation();
-  const [activities, setActivities] = useState<Activity[]>(INITIAL_ACTIVITIES);
+
+  const { data: rawActivities, isLoading, create, update } = useActivities();
+  const activities = useMemo(() => rawActivities.map(toActivity), [rawActivities]);
+
   const [timeTab, setTimeTab] = useState<string>(isSales ? "assignee" : "overall");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
@@ -344,14 +372,14 @@ export default function ActivitiesPage() {
   const { data: leads } = useGetLeads({}, { query: { queryKey: getGetLeadsQueryKey({}) } });
   const customerNames = useMemo(() => (leads ?? []).map(l => l.name), [leads]);
 
-  /* Filter by time tab — sales role always sees own activities only */
+  /* Filter by time tab */
   const timeFiltered = useMemo(() => {
-    const base = isSales ? activities.filter(a => a.employee === profile.name) : activities;
+    const base = activities;
     if (timeTab === "overall" || timeTab === "assignee") return base;
     return base.filter(a => getTimeCategory(a) === timeTab);
-  }, [activities, timeTab, profile.name, isSales]);
+  }, [activities, timeTab]);
 
-  /* Counts per type (from time-filtered set) */
+  /* Counts per type */
   const typeCounts = useMemo(() => {
     const counts: Record<string, number> = { all: timeFiltered.length };
     ACTIVITY_TYPES.forEach(t => { counts[t.id] = timeFiltered.filter(a => a.activityType === t.id).length; });
@@ -363,7 +391,12 @@ export default function ActivitiesPage() {
     let list = typeFilter === "all" ? timeFiltered : timeFiltered.filter(a => a.activityType === typeFilter);
     if (search) {
       const q = search.toLowerCase();
-      list = list.filter(a => a.customer.toLowerCase().includes(q) || a.phone.includes(q) || a.employee.toLowerCase().includes(q) || a.source.toLowerCase().includes(q));
+      list = list.filter(a =>
+        a.customer.toLowerCase().includes(q) ||
+        a.phone.includes(q) ||
+        a.employee.toLowerCase().includes(q) ||
+        a.source.toLowerCase().includes(q)
+      );
     }
     return [...list].sort((a, b) => {
       const diff = a.activityDate.localeCompare(b.activityDate);
@@ -371,14 +404,18 @@ export default function ActivitiesPage() {
     });
   }, [timeFiltered, typeFilter, search, sortAsc]);
 
-  function addActivity(act: Omit<Activity, "id">) {
-    setActivities(prev => [{ ...act, id: Math.max(0, ...prev.map(a => a.id)) + 1 }, ...prev]);
-    toast({ title: "Activity scheduled" });
+  async function handleAddActivity(input: CreateActivityInput) {
+    const result = await create.mutateAsync(input);
+    if (result) {
+      toast({ title: "Activity scheduled" });
+    } else {
+      toast({ title: "Failed to schedule activity", variant: "destructive" });
+    }
   }
 
   function updateActivity(id: number, remark: string, status: ActivityStatus) {
     const act = activities.find(a => a.id === id);
-    setActivities(prev => prev.map(a => a.id === id ? { ...a, lastRemark: remark, status } : a));
+    update.mutate({ id, lastRemark: remark, status });
     if (status === "cancelled") {
       toast({ title: "Activity cancelled" });
     } else if (status === "completed") {
@@ -401,13 +438,12 @@ export default function ActivitiesPage() {
     }
   }
 
-  /* Time-of-day greeting */
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good Morning" : hour < 17 ? "Good Afternoon" : "Good Evening";
 
   return (
     <div className="p-4 sm:p-6 space-y-4">
-      <ScheduleDialog open={scheduleOpen} onClose={() => setScheduleOpen(false)} onSave={addActivity} customers={customerNames} />
+      <ScheduleDialog open={scheduleOpen} onClose={() => setScheduleOpen(false)} onSave={handleAddActivity} customers={customerNames} />
 
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
@@ -478,17 +514,10 @@ export default function ActivitiesPage() {
             <thead className="bg-muted/40 border-b border-border">
               <tr>
                 {[
-                  { label: "Customer",           key: "customer" },
-                  { label: "Phone",              key: "phone" },
-                  { label: "Employee",           key: "employee" },
-                  { label: "Created Date",       key: "createdDate" },
-                  { label: "Scheduled Activity", key: "activityType" },
-                  { label: "Source Name",        key: "source" },
-                  { label: "Activity Date",      key: "activityDate" },
-                  { label: "Activity Time",      key: "activityTime" },
-                  { label: "Last Remark",        key: "lastRemark" },
-                  { label: "Status",             key: "status" },
-                ].map(({ label, key }) => (
+                  "Customer", "Phone", "Employee", "Created Date",
+                  "Scheduled Activity", "Source Name", "Activity Date",
+                  "Activity Time", "Last Remark", "Status",
+                ].map(label => (
                   <th key={label} className="text-left px-3 py-3 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">
                     {label === "Activity Date" ? (
                       <button onClick={() => setSortAsc(p => !p)} className="flex items-center gap-1 hover:text-foreground transition-colors">
@@ -500,15 +529,16 @@ export default function ActivitiesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {displayed.length === 0 ? (
+              {isLoading ? (
+                Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} />)
+              ) : displayed.length === 0 ? (
                 <tr><td colSpan={10} className="py-12 text-center text-sm text-muted-foreground">No activities found</td></tr>
-              ) : displayed.map((act) => {
+              ) : displayed.map(act => {
                 const typeConf = activityTypeConfig(act.activityType);
                 const isToday = act.activityDate === todayStr();
                 const isPast = act.activityDate < todayStr() && act.status !== "completed";
                 return (
                   <tr key={act.id} className={cn("hover:bg-muted/20 transition-colors", isPast && act.status !== "completed" && "bg-red-50/30")}>
-                    {/* Customer */}
                     <td className="px-3 py-3">
                       <div className="flex items-center gap-2">
                         <div className="w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px] font-bold flex-shrink-0">
@@ -520,25 +550,19 @@ export default function ActivitiesPage() {
                         </div>
                       </div>
                     </td>
-                    {/* Phone */}
                     <td className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">
                       <a href={`tel:${act.phone}`} className="hover:text-primary transition-colors flex items-center gap-1">
                         <Phone className="w-3 h-3" />{act.phone}
                       </a>
                     </td>
-                    {/* Employee */}
                     <td className="px-3 py-3 text-xs font-medium text-foreground whitespace-nowrap">{act.employee}</td>
-                    {/* Created Date */}
                     <td className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">{act.createdDate}</td>
-                    {/* Scheduled Activity */}
                     <td className="px-3 py-3">
                       <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border whitespace-nowrap", typeConf.color)}>
                         <typeConf.icon className="w-2.5 h-2.5" />{typeConf.label}
                       </span>
                     </td>
-                    {/* Source */}
                     <td className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">{act.source}</td>
-                    {/* Activity Date */}
                     <td className="px-3 py-3">
                       <span className={cn("text-xs font-medium whitespace-nowrap",
                         isToday ? "text-primary font-semibold" : isPast && act.status !== "completed" ? "text-red-600" : "text-foreground")}>
@@ -547,15 +571,12 @@ export default function ActivitiesPage() {
                         {isPast && act.status !== "completed" && <span className="ml-1 text-[9px] bg-red-100 text-red-600 px-1 rounded">Overdue</span>}
                       </span>
                     </td>
-                    {/* Activity Time */}
                     <td className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">
                       <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{act.activityTime}</span>
                     </td>
-                    {/* Last Remark */}
                     <td className="px-3 py-3">
                       <RemarkCell activity={act} onUpdate={updateActivity} />
                     </td>
-                    {/* Status */}
                     <td className="px-3 py-3">
                       <StatusToggle activity={act} onUpdate={updateActivity} />
                     </td>
@@ -566,7 +587,6 @@ export default function ActivitiesPage() {
           </table>
         </div>
 
-        {/* Table footer */}
         <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/20">
           <p className="text-xs text-muted-foreground">
             activity_date — {sortAsc ? "ASC" : "DESC"}

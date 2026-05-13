@@ -7,3 +7,4 @@ export * from "./viewings";
 export * from "./users";
 export * from "./units";
 export * from "./notifications";
+export * from "./scheduled-activities";
