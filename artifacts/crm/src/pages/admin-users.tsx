@@ -27,7 +27,7 @@ const ROLE_COLORS: Record<string, string> = {
   cfo:     "bg-blue-100 text-blue-800",
   manager: "bg-green-100 text-green-800",
   sales:   "bg-purple-100 text-purple-800",
-  broker:  "bg-teal-100 text-teal-800",
+  agent:   "bg-teal-100 text-teal-800",
 };
 
 function roleColor(role: string) {
@@ -38,7 +38,7 @@ function roleLabel(role: string) {
   return ROLE_PROFILES.find(r => r.value === role)?.label ?? role;
 }
 
-const AGENT_ROLES = ["manager", "sales", "broker"];
+const AGENT_ROLES = ["manager", "sales", "agent"];
 const EMPTY_FORM = { username: "", password: "", name: "", email: "", role: "sales" as UserRole, isAdmin: false };
 
 export default function AdminUsersPage() {

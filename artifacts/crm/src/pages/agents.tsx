@@ -12,14 +12,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { formatCurrency, AGENT_ROLES, MARKETS } from "@/lib/utils";
+import { formatCurrency, AGENT_ROLES } from "@/lib/utils";
 
 const createAgentSchema = z.object({
   name: z.string().min(1, "Name required"),
   email: z.string().email("Valid email required"),
   phone: z.string().optional(),
   role: z.string().min(1),
-  market: z.string().optional(),
 });
 type FormValues = z.infer<typeof createAgentSchema>;
 
@@ -44,11 +43,11 @@ export default function AgentsPage() {
 
   const form = useForm<FormValues>({
     resolver: zodResolver(createAgentSchema),
-    defaultValues: { name: "", email: "", phone: "", role: "agent", market: "US" },
+    defaultValues: { name: "", email: "", phone: "", role: "sales" },
   });
 
   function onSubmit(values: FormValues) {
-    createAgent.mutate({ data: { ...values, phone: values.phone ?? null, market: values.market ?? null } });
+    createAgent.mutate({ data: { ...values, phone: values.phone ?? null } });
   }
 
   return (
@@ -84,7 +83,6 @@ export default function AgentsPage() {
                 </div>
                 <div className="flex gap-1.5">
                   <span className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground capitalize">{agent.role}</span>
-                  {agent.market && <span className="text-xs px-2 py-0.5 rounded bg-primary/10 text-primary font-medium">{agent.market}</span>}
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-3 pt-3 border-t border-border">
@@ -129,24 +127,18 @@ export default function AgentsPage() {
               <FormField control={form.control} name="phone" render={({ field }) => (
                 <FormItem><FormLabel>Phone</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
               )} />
-              <div className="grid grid-cols-2 gap-4">
-                <FormField control={form.control} name="role" render={({ field }) => (
-                  <FormItem><FormLabel>Role</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>{AGENT_ROLES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
-                    </Select><FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="market" render={({ field }) => (
-                  <FormItem><FormLabel>Market</FormLabel>
-                    <Select value={field.value ?? ""} onValueChange={field.onChange}>
-                      <SelectTrigger><SelectValue placeholder="Any" /></SelectTrigger>
-                      <SelectContent>{MARKETS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
-                    </Select><FormMessage />
-                  </FormItem>
-                )} />
-              </div>
+              <FormField control={form.control} name="role" render={({ field }) => (
+                <FormItem><FormLabel>Role</FormLabel>
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="manager">Manager</SelectItem>
+                      <SelectItem value="sales">Sales</SelectItem>
+                      <SelectItem value="agent">Agent / Broker</SelectItem>
+                    </SelectContent>
+                  </Select><FormMessage />
+                </FormItem>
+              )} />
               <div className="flex justify-end gap-2 pt-2">
                 <Button type="button" variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
                 <Button type="submit" data-testid="button-submit-agent" disabled={createAgent.isPending}>

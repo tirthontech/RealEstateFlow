@@ -72,7 +72,7 @@ const ACT_TYPES = [
 /* ─── Create Lead Schema ─────────────────────────────────────────── */
 const createLeadSchema = z.object({
   name:         z.string().min(1, "Name is required"),
-  email:        z.string().email("Valid email required"),
+  email:        z.string().email("Invalid email").optional().or(z.literal("")),
   phone:        z.string().optional(),
   source:       z.string().min(1),
   status:       z.string().min(1),
@@ -250,7 +250,7 @@ export default function LeadsPage() {
       ? (authUser?.agentId ?? (agents ?? []).find(a => a.name === profile.name)?.id ?? null)
       : values.assignedTo ?? null;
 
-    createLead.mutate({ data: { ...values, budget: values.budget ?? null, propertyType: values.propertyType ?? null, notes: values.notes ?? null, assignedTo: selfAgentId } });
+    createLead.mutate({ data: { ...values, email: values.email || "", budget: values.budget ?? null, propertyType: values.propertyType ?? null, notes: values.notes ?? null, assignedTo: selfAgentId } });
   }
 
   // Sales: filter to own leads only. Prefer agentId match; fall back to name match if agentId not linked yet.

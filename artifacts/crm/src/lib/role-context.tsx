@@ -1,7 +1,7 @@
 import { createContext, useContext, useMemo, useCallback } from "react";
 import { useAuth } from "./auth-context";
 
-export type UserRole = "owner" | "cfo" | "manager" | "sales" | "broker";
+export type UserRole = "owner" | "cfo" | "manager" | "sales" | "agent";
 
 // Role metadata (colors, labels) — name/avatar override comes from auth user
 export const ROLE_PROFILES: {
@@ -16,7 +16,7 @@ export const ROLE_PROFILES: {
   { value: "cfo",     label: "CFO / Finance",    description: "Finance data entry and visibility",   avatar: "RK", name: "Rakesh Kumar", color: "bg-blue-600"   },
   { value: "manager", label: "Manager",           description: "Team oversight, approval authority",  avatar: "SJ", name: "Sneha Joshi",  color: "bg-green-600"  },
   { value: "sales",   label: "Salesperson",       description: "Lead management, data entry",         avatar: "RS", name: "Riya Sharma",  color: "bg-purple-600" },
-  { value: "broker",  label: "Broker / Agent",    description: "External broker — leads and deals",   avatar: "VB", name: "Vijay Broker", color: "bg-teal-600"   },
+  { value: "agent",   label: "Agent / Broker",    description: "Field agent — leads and commission",  avatar: "VB", name: "Vijay Agent",  color: "bg-teal-600"   },
 ];
 
 export const ROLE_NAV_ACCESS: Record<UserRole, string[]> = {
@@ -24,7 +24,7 @@ export const ROLE_NAV_ACCESS: Record<UserRole, string[]> = {
   cfo:     ["dashboard", "analytics", "commission", "settings"],
   manager: ["dashboard", "leads", "properties", "deals", "agents", "viewings", "whatsapp", "analytics", "commission", "settings", "approvals", "activities"],
   sales:   ["dashboard", "leads", "properties", "deals", "activities"],
-  broker:  ["dashboard", "leads", "properties", "commission", "activities"],
+  agent:   ["dashboard", "leads", "properties", "commission", "activities"],
 };
 
 const RoleContext = createContext<{
