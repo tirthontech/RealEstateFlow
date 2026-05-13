@@ -89,9 +89,6 @@ export default function AdminUsersPage() {
     if (!form.username || !form.password || !form.name || !form.role) {
       toast({ title: "All fields are required", variant: "destructive" }); return;
     }
-    if (AGENT_ROLES.includes(form.role) && !form.email) {
-      toast({ title: "Email is required for this role", variant: "destructive" }); return;
-    }
     setSaving(true);
     try {
       await apiFetch("/admin/users", { method: "POST", body: JSON.stringify(form) });
@@ -301,11 +298,11 @@ export default function AdminUsersPage() {
                   </label>
                 </div>
 
-                {/* Email — required for operational roles when creating (creates agent profile) */}
+                {/* Email — optional, shown for agent roles */}
                 {!editUser && AGENT_ROLES.includes(form.role) && (
                   <div className="col-span-2">
                     <label className="text-xs font-medium text-muted-foreground block mb-1">
-                      Work Email * <span className="text-[10px] text-primary">(creates agent profile)</span>
+                      Work Email <span className="text-[10px] text-muted-foreground">(optional)</span>
                     </label>
                     <input
                       type="email"
@@ -320,7 +317,7 @@ export default function AdminUsersPage() {
 
               {!editUser && AGENT_ROLES.includes(form.role) && (
                 <p className="text-[11px] text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
-                  An agent profile will be created automatically. This person's leads, deals and site visits will be tracked under their profile.
+                  An agent profile will be created automatically and appear in the Agents section. Leads, deals and activities will be tracked under their profile.
                 </p>
               )}
               {form.isAdmin && (

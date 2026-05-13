@@ -3,7 +3,6 @@ import { eq, sql, isNotNull } from "drizzle-orm";
 import { db, agentsTable, leadsTable, dealsTable, usersTable, scheduledActivitiesTable, activityTable } from "@workspace/db";
 import { ownerMiddleware } from "../middlewares/auth";
 import {
-  CreateAgentBody,
   UpdateAgentBody,
   UpdateAgentParams,
   GetAgentParams,
@@ -14,14 +13,12 @@ const router: IRouter = Router();
 async function enrichAgents(agents: (typeof agentsTable.$inferSelect)[]) {
   if (agents.length === 0) return [];
 
-  // Batch: leads count per agent
   const leadRows = await db
     .select({ agentId: leadsTable.assignedTo, count: sql<number>`count(*)::int` })
     .from(leadsTable)
     .groupBy(leadsTable.assignedTo);
   const leadCount = new Map(leadRows.map(r => [r.agentId, r.count]));
 
-  // Batch: deals count + revenue per agent
   const dealRows = await db
     .select({
       agentId: dealsTable.agentId,
@@ -32,14 +29,12 @@ async function enrichAgents(agents: (typeof agentsTable.$inferSelect)[]) {
     .groupBy(dealsTable.agentId);
   const dealMap = new Map(dealRows.map(r => [r.agentId, r]));
 
-  // Batch: scheduled activities count per agent
   const actRows = await db
     .select({ agentId: scheduledActivitiesTable.agentId, count: sql<number>`count(*)::int` })
     .from(scheduledActivitiesTable)
     .groupBy(scheduledActivitiesTable.agentId);
   const actCount = new Map(actRows.map(r => [r.agentId, r.count]));
 
-  // Batch: users that have an agentId set → map agentId → {userId, username}
   const userRows = await db
     .select({ agentId: usersTable.agentId, id: usersTable.id, username: usersTable.username })
     .from(usersTable)
@@ -67,27 +62,6 @@ async function enrichAgents(agents: (typeof agentsTable.$inferSelect)[]) {
 router.get("/agents", async (_req, res): Promise<void> => {
   const agents = await db.select().from(agentsTable).orderBy(agentsTable.name);
   res.json(await enrichAgents(agents));
-});
-
-router.post("/agents", async (req, res): Promise<void> => {
-  const parsed = CreateAgentBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
-  // Manual creation from Agents page → no userId, hasLogin = false
-  const [agent] = await db.insert(agentsTable).values(parsed.data).returning();
-  res.status(201).json({
-    ...agent,
-    activeLeads: 0,
-    dealsCount: 0,
-    revenue: 0,
-    activitiesCount: 0,
-    userId: null,
-    username: null,
-    hasLogin: false,
-    createdAt: agent.createdAt.toISOString(),
-  });
 });
 
 router.get("/agents/:id", async (req, res): Promise<void> => {
@@ -131,6 +105,7 @@ router.put("/agents/:id", async (req, res): Promise<void> => {
   res.json(enriched);
 });
 
+// Delete agent — also deletes the linked user account so both stay in sync
 router.delete("/agents/:id", ownerMiddleware as any, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
@@ -143,10 +118,16 @@ router.delete("/agents/:id", ownerMiddleware as any, async (req, res): Promise<v
     res.status(404).json({ error: "Agent not found" });
     return;
   }
-  // Cascade: unassign leads, unlink scheduled activities
+
   await db.update(leadsTable).set({ assignedTo: null }).where(eq(leadsTable.assignedTo, id));
   await db.update(scheduledActivitiesTable).set({ agentId: null }).where(eq(scheduledActivitiesTable.agentId, id));
   await db.delete(agentsTable).where(eq(agentsTable.id, id));
+
+  // Also remove the linked user account so they can no longer log in
+  if (agent.userId) {
+    await db.delete(usersTable).where(eq(usersTable.id, agent.userId));
+  }
+
   await db.insert(activityTable).values({
     type: "agent_deleted",
     description: `Agent deleted`,

@@ -2,33 +2,17 @@ import { useState } from "react";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import {
-  useGetAgents, useCreateAgent, useGetLeads, useUpdateLead,
+  useGetAgents, useGetLeads, useUpdateLead,
   getGetAgentsQueryKey, getGetLeadsQueryKey, customFetch,
 } from "@workspace/api-client-react";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import {
-  Plus, Users, Activity, ShieldCheck, ShieldOff,
+  Users, Activity, ShieldCheck, ShieldOff,
   Mail, Phone, ExternalLink, Info, UserPlus, Trash2, UserCheck, X, Loader2,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, cn } from "@/lib/utils";
 import { useRole } from "@/lib/role-context";
-
-const createAgentSchema = z.object({
-  name: z.string().min(1, "Name required"),
-  email: z.string().email("Valid email required"),
-  phone: z.string().optional(),
-  role: z.string().min(1),
-});
-type FormValues = z.infer<typeof createAgentSchema>;
 
 const ROLE_COLORS: Record<string, string> = {
   manager: "bg-green-100 text-green-800",
@@ -64,7 +48,7 @@ function AssignLeadModal({ agent, onClose }: { agent: { id: number; name: string
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <div>
             <p className="font-semibold text-sm text-foreground">Assign Lead</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Pick a lead to assign to <span className="font-medium">{agent.name}</span></p>
+            <p className="text-xs text-muted-foreground mt-0.5">Pick a lead for <span className="font-medium">{agent.name}</span></p>
           </div>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-0.5"><X className="w-4 h-4" /></button>
         </div>
@@ -96,7 +80,6 @@ function AssignLeadModal({ agent, onClose }: { agent: { id: number; name: string
 }
 
 export default function AgentsPage() {
-  const [showCreate, setShowCreate] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [assignTarget, setAssignTarget] = useState<{ id: number; name: string } | null>(null);
   const [deleteName, setDeleteName] = useState("");
@@ -111,36 +94,12 @@ export default function AgentsPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: getGetAgentsQueryKey() });
       setDeleteId(null);
-      toast({ title: "Agent deleted" });
+      toast({ title: "Agent and their login account deleted" });
     },
     onError: () => toast({ title: "Failed to delete agent", variant: "destructive" }),
   });
 
   const { data: agents, isLoading } = useGetAgents();
-  const createAgent = useCreateAgent({
-    mutation: {
-      onSuccess: () => {
-        qc.invalidateQueries({ queryKey: getGetAgentsQueryKey() });
-        setShowCreate(false);
-        toast({ title: "Agent profile created (no login access)" });
-        form.reset();
-      },
-      onError: (e: any) => toast({
-        title: "Error adding agent",
-        description: e?.response?.data?.error ?? "Please try again",
-        variant: "destructive",
-      }),
-    },
-  });
-
-  const form = useForm<FormValues>({
-    resolver: zodResolver(createAgentSchema),
-    defaultValues: { name: "", email: "", phone: "", role: "agent" },
-  });
-
-  function onSubmit(values: FormValues) {
-    createAgent.mutate({ data: { ...values, phone: values.phone || null } });
-  }
 
   return (
     <div className="p-4 sm:p-6 space-y-5">
@@ -154,34 +113,35 @@ export default function AgentsPage() {
             {agents?.length ?? 0} team member{(agents?.length ?? 0) !== 1 ? "s" : ""}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          {isAdmin && (
-            <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setLocation("/admin/users")}>
-              <UserPlus className="w-3.5 h-3.5" />
-              Add with Login
-            </Button>
-          )}
-          <Button data-testid="button-create-agent" onClick={() => setShowCreate(true)} size="sm" className="gap-1.5 text-xs">
-            <Plus className="w-3.5 h-3.5" />
+        {isAdmin && (
+          <button
+            onClick={() => setLocation("/admin/users")}
+            className="flex items-center gap-2 bg-primary text-primary-foreground text-sm font-semibold px-4 py-2 rounded-lg hover:bg-primary/90 transition"
+          >
+            <UserPlus className="w-4 h-4" />
             Add Agent
-          </Button>
-        </div>
+          </button>
+        )}
       </div>
 
-      {/* Info banner for admins */}
-      {isAdmin && (
-        <div className="flex items-start gap-2.5 text-xs px-3.5 py-2.5 bg-blue-50 border border-blue-200 rounded-lg text-blue-800">
-          <Info className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
-          <p>
-            <span className="font-semibold">Two ways to add agents:</span>{" "}
-            Use <span className="font-medium">Add Agent</span> for a CRM profile without login, or{" "}
-            <button onClick={() => setLocation("/admin/users")} className="underline font-medium hover:text-blue-900">
-              Settings → Users
-            </button>{" "}
-            to create a login account (automatically links an agent profile).
-          </p>
-        </div>
-      )}
+      {/* Info banner */}
+      <div className="flex items-start gap-2.5 text-xs px-3.5 py-2.5 bg-blue-50 border border-blue-200 rounded-lg text-blue-800">
+        <Info className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+        <p>
+          Agents are the same as platform users.{" "}
+          {isAdmin ? (
+            <>
+              To add an agent, go to{" "}
+              <button onClick={() => setLocation("/admin/users")} className="underline font-semibold hover:text-blue-900">
+                Manage Users
+              </button>{" "}
+              and create a user with the <span className="font-semibold">Agent, Manager or Broker</span> role — their profile will appear here automatically.
+            </>
+          ) : (
+            "Ask an admin to add a user with the Agent, Manager or Broker role."
+          )}
+        </p>
+      </div>
 
       {/* Grid */}
       {isLoading ? (
@@ -192,23 +152,28 @@ export default function AgentsPage() {
         <div className="bg-card border border-card-border rounded-xl py-16 text-center">
           <Users className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
           <p className="text-muted-foreground text-sm font-medium">No agents yet</p>
-          <p className="text-xs text-muted-foreground mt-1">Add an agent profile or create a user with an agent role.</p>
+          {isAdmin && (
+            <button
+              onClick={() => setLocation("/admin/users")}
+              className="mt-3 text-xs text-primary underline hover:text-primary/80"
+            >
+              Add a user with an agent role →
+            </button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {(agents ?? []).map((agent) => (
             <div
               key={agent.id}
-              data-testid={`card-agent-${agent.id}`}
               className="bg-card border border-card-border rounded-xl overflow-hidden hover:shadow-md hover:border-primary/30 transition-all group"
             >
               {/* Card header */}
               <div className="p-4 pb-3">
                 <div className="flex items-start justify-between gap-2 mb-2">
-                  {/* Avatar + name */}
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-bold flex-shrink-0">
-                      {agent.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()}
+                      {agent.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
                     </div>
                     <div className="min-w-0">
                       <h3 className="font-semibold text-foreground text-sm leading-tight truncate">{agent.name}</h3>
@@ -238,10 +203,12 @@ export default function AgentsPage() {
 
                 {/* Contact info */}
                 <div className="space-y-1 mt-2.5 text-xs text-muted-foreground">
-                  <div className="flex items-center gap-1.5 truncate">
-                    <Mail className="w-3 h-3 flex-shrink-0" />
-                    <span className="truncate">{agent.email}</span>
-                  </div>
+                  {agent.email && (
+                    <div className="flex items-center gap-1.5 truncate">
+                      <Mail className="w-3 h-3 flex-shrink-0" />
+                      <span className="truncate">{agent.email}</span>
+                    </div>
+                  )}
                   {agent.phone && (
                     <div className="flex items-center gap-1.5">
                       <Phone className="w-3 h-3 flex-shrink-0" />
@@ -317,68 +284,9 @@ export default function AgentsPage() {
         onOpenChange={(open) => { if (!open) setDeleteId(null); }}
         onConfirm={() => deleteId && deleteAgent.mutate(deleteId)}
         title="Delete Agent"
-        description={`Are you sure you want to delete "${deleteName}"? Their leads will become unassigned. This action cannot be undone.`}
+        description={`Delete "${deleteName}"? This will also remove their login account and unassign all their leads. This cannot be undone.`}
         loading={deleteAgent.isPending}
       />
-
-      {/* Add Agent dialog (no login — CRM profile only) */}
-      <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Plus className="w-4 h-4 text-primary" />
-              Add Agent Profile
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="text-xs bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-3 py-2 mb-1">
-            This creates a CRM-only profile with <span className="font-semibold">no login access</span>. To allow this agent to log in, use{" "}
-            <button onClick={() => { setShowCreate(false); setLocation("/admin/users"); }} className="underline font-medium">
-              Settings → Users
-            </button> instead.
-          </div>
-
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
-              <FormField control={form.control} name="name" render={({ field }) => (
-                <FormItem><FormLabel>Full Name *</FormLabel><FormControl>
-                  <Input data-testid="input-agent-name" placeholder="Riya Sharma" {...field} />
-                </FormControl><FormMessage /></FormItem>
-              )} />
-              <FormField control={form.control} name="email" render={({ field }) => (
-                <FormItem><FormLabel>Work Email *</FormLabel><FormControl>
-                  <Input data-testid="input-agent-email" type="email" placeholder="riya@company.com" {...field} />
-                </FormControl><FormMessage /></FormItem>
-              )} />
-              <div className="grid grid-cols-2 gap-3">
-                <FormField control={form.control} name="phone" render={({ field }) => (
-                  <FormItem><FormLabel>Phone</FormLabel><FormControl>
-                    <Input placeholder="+91 98xxx xxxxx" {...field} />
-                  </FormControl><FormMessage /></FormItem>
-                )} />
-                <FormField control={form.control} name="role" render={({ field }) => (
-                  <FormItem><FormLabel>Role</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="manager">Manager</SelectItem>
-                        <SelectItem value="agent">Agent</SelectItem>
-                        <SelectItem value="broker">Broker</SelectItem>
-                      </SelectContent>
-                    </Select><FormMessage />
-                  </FormItem>
-                )} />
-              </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <Button type="button" variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
-                <Button type="submit" data-testid="button-submit-agent" disabled={createAgent.isPending}>
-                  {createAgent.isPending ? "Adding…" : "Add Agent"}
-                </Button>
-              </div>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

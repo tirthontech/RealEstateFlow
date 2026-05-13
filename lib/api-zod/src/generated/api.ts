@@ -391,7 +391,7 @@ export const DeleteDealParams = zod.object({
 export const GetAgentsResponseItem = zod.object({
   id: zod.number(),
   name: zod.string(),
-  email: zod.string(),
+  email: zod.string().nullish(),
   phone: zod.string().nullish(),
   role: zod.string().describe("admin, manager, agent, support"),
   market: zod.string().nullish().describe("US, UK, AU, NZ, EU"),
@@ -427,7 +427,7 @@ export const GetAgentParams = zod.object({
 export const GetAgentResponse = zod.object({
   id: zod.number(),
   name: zod.string(),
-  email: zod.string(),
+  email: zod.string().nullish(),
   phone: zod.string().nullish(),
   role: zod.string().describe("admin, manager, agent, support"),
   market: zod.string().nullish().describe("US, UK, AU, NZ, EU"),
@@ -459,7 +459,7 @@ export const UpdateAgentBody = zod.object({
 export const UpdateAgentResponse = zod.object({
   id: zod.number(),
   name: zod.string(),
-  email: zod.string(),
+  email: zod.string().nullish(),
   phone: zod.string().nullish(),
   role: zod.string().describe("admin, manager, agent, support"),
   market: zod.string().nullish().describe("US, UK, AU, NZ, EU"),
