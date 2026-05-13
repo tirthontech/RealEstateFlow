@@ -571,7 +571,7 @@ export default function PropertiesPage() {
   const { toast } = useToast();
   const { role } = useRole();
   const { token } = useAuth();
-  const isSales = role === "sales";
+  const isSales = role === "agent";
   const canManageUnits = role === "owner" || role === "manager";
   const [, setLocation] = useLocation();
 

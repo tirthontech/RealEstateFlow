@@ -3,17 +3,17 @@ import { db, usersTable, agentsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { logger } from "./lib/logger";
 
-// Demo users; operational roles (manager/sales/broker) also get an agent record
+// Demo users; operational roles (manager/agent) also get an agent record
 const DEMO_USERS = [
   { username: "admin",  password: "Admin@123", name: "Harsh Jain",   role: "owner",   isAdmin: true,  email: null },
   { username: "harsh",  password: "Demo@123",  name: "Harsh Jain",   role: "owner",   isAdmin: false, email: null },
   { username: "rakesh", password: "Demo@123",  name: "Rakesh Kumar", role: "cfo",     isAdmin: false, email: null },
   { username: "sneha",  password: "Demo@123",  name: "Sneha Joshi",  role: "manager", isAdmin: false, email: "sneha.joshi@estate.demo" },
-  { username: "riya",   password: "Demo@123",  name: "Riya Sharma",  role: "sales",   isAdmin: false, email: "riya.sharma@estate.demo" },
+  { username: "riya",   password: "Demo@123",  name: "Riya Sharma",  role: "agent",   isAdmin: false, email: "riya.sharma@estate.demo" },
   { username: "vijay",  password: "Demo@123",  name: "Vijay Agent",  role: "agent",   isAdmin: false, email: "vijay.agent@estate.demo"  },
 ];
 
-const AGENT_ROLES = ["manager", "sales", "agent"];
+const AGENT_ROLES = ["manager", "agent"];
 
 export async function seedUsers(): Promise<void> {
   try {

@@ -117,7 +117,7 @@ export default function DealsPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const { role, profile } = useRole();
-  const isSales = role === "sales";
+  const isSales = role === "agent";
 
   const { data: allDeals, isLoading } = useGetDeals({}, { query: { queryKey: getGetDealsQueryKey() } });
   const { data: leads } = useGetLeads({}, { query: { queryKey: ["leads"] } });

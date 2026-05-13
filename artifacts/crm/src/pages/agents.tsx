@@ -43,7 +43,7 @@ export default function AgentsPage() {
 
   const form = useForm<FormValues>({
     resolver: zodResolver(createAgentSchema),
-    defaultValues: { name: "", email: "", phone: "", role: "sales" },
+    defaultValues: { name: "", email: "", phone: "", role: "agent" },
   });
 
   function onSubmit(values: FormValues) {
@@ -133,8 +133,7 @@ export default function AgentsPage() {
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="manager">Manager</SelectItem>
-                      <SelectItem value="sales">Sales</SelectItem>
-                      <SelectItem value="agent">Agent / Broker</SelectItem>
+                      <SelectItem value="agent">Agent</SelectItem>
                     </SelectContent>
                   </Select><FormMessage />
                 </FormItem>

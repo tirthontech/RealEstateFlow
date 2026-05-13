@@ -1,7 +1,7 @@
 import { createContext, useContext, useMemo, useCallback } from "react";
 import { useAuth } from "./auth-context";
 
-export type UserRole = "owner" | "cfo" | "manager" | "sales" | "agent";
+export type UserRole = "owner" | "cfo" | "manager" | "agent";
 
 // Role metadata (colors, labels) — name/avatar override comes from auth user
 export const ROLE_PROFILES: {
@@ -15,16 +15,14 @@ export const ROLE_PROFILES: {
   { value: "owner",   label: "Owner / Promoter", description: "Full platform access, all approvals", avatar: "HJ", name: "Harsh Jain",   color: "bg-amber-500"  },
   { value: "cfo",     label: "CFO / Finance",    description: "Finance data entry and visibility",   avatar: "RK", name: "Rakesh Kumar", color: "bg-blue-600"   },
   { value: "manager", label: "Manager",           description: "Team oversight, approval authority",  avatar: "SJ", name: "Sneha Joshi",  color: "bg-green-600"  },
-  { value: "sales",   label: "Salesperson",       description: "Lead management, data entry",         avatar: "RS", name: "Riya Sharma",  color: "bg-purple-600" },
-  { value: "agent",   label: "Agent / Broker",    description: "Field agent — leads and commission",  avatar: "VB", name: "Vijay Agent",  color: "bg-teal-600"   },
+  { value: "agent",   label: "Agent",             description: "Field agent — leads, deals, commission", avatar: "RS", name: "Riya Sharma", color: "bg-purple-600" },
 ];
 
 export const ROLE_NAV_ACCESS: Record<UserRole, string[]> = {
   owner:   ["dashboard", "leads", "properties", "deals", "agents", "viewings", "whatsapp", "analytics", "commission", "integrations", "settings", "approvals", "activities"],
   cfo:     ["dashboard", "analytics", "commission", "settings"],
   manager: ["dashboard", "leads", "properties", "deals", "agents", "viewings", "whatsapp", "analytics", "commission", "settings", "approvals", "activities"],
-  sales:   ["dashboard", "leads", "properties", "deals", "activities"],
-  agent:   ["dashboard", "leads", "properties", "commission", "activities"],
+  agent:   ["dashboard", "leads", "properties", "deals", "commission", "activities"],
 };
 
 const RoleContext = createContext<{
@@ -32,7 +30,7 @@ const RoleContext = createContext<{
   profile: typeof ROLE_PROFILES[number];
   can: (page: string) => boolean;
 }>({
-  role: "sales",
+  role: "agent",
   profile: ROLE_PROFILES[3],
   can: () => false,
 });
@@ -40,7 +38,7 @@ const RoleContext = createContext<{
 export function RoleProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
 
-  const role = (user?.role ?? "sales") as UserRole;
+  const role = (user?.role ?? "agent") as UserRole;
 
   const profile = useMemo(() => {
     const base = ROLE_PROFILES.find(r => r.value === role) ?? ROLE_PROFILES[3];

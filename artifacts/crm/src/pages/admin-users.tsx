@@ -26,7 +26,7 @@ const ROLE_COLORS: Record<string, string> = {
   owner:   "bg-amber-100 text-amber-800",
   cfo:     "bg-blue-100 text-blue-800",
   manager: "bg-green-100 text-green-800",
-  sales:   "bg-purple-100 text-purple-800",
+  agent:   "bg-purple-100 text-purple-800",
   agent:   "bg-teal-100 text-teal-800",
 };
 
@@ -38,8 +38,8 @@ function roleLabel(role: string) {
   return ROLE_PROFILES.find(r => r.value === role)?.label ?? role;
 }
 
-const AGENT_ROLES = ["manager", "sales", "agent"];
-const EMPTY_FORM = { username: "", password: "", name: "", email: "", role: "sales" as UserRole, isAdmin: false };
+const AGENT_ROLES = ["manager", "agent"];
+const EMPTY_FORM = { username: "", password: "", name: "", email: "", role: "agent" as UserRole, isAdmin: false };
 
 export default function AdminUsersPage() {
   const { token, user: me } = useAuth();

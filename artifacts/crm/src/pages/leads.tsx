@@ -209,7 +209,7 @@ export default function LeadsPage() {
   const { toast } = useToast();
   const { profile, role } = useRole();
   const { user: authUser } = useAuth();
-  const isSales = role === "sales";
+  const isSales = role === "agent";
   const [, setLocation] = useLocation();
 
   const { data: leads, isLoading } = useGetLeads({}, { query: { queryKey: getGetLeadsQueryKey({}) } });
