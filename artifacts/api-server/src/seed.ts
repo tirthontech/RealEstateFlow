@@ -10,10 +10,10 @@ const DEMO_USERS = [
   { username: "rakesh", password: "Demo@123",  name: "Rakesh Kumar", role: "cfo",     isAdmin: false, email: null },
   { username: "sneha",  password: "Demo@123",  name: "Sneha Joshi",  role: "manager", isAdmin: false, email: "sneha.joshi@estate.demo" },
   { username: "riya",   password: "Demo@123",  name: "Riya Sharma",  role: "agent",   isAdmin: false, email: "riya.sharma@estate.demo" },
-  { username: "vijay",  password: "Demo@123",  name: "Vijay Agent",  role: "agent",   isAdmin: false, email: "vijay.agent@estate.demo"  },
+  { username: "vijay",  password: "Demo@123",  name: "Vijay Broker", role: "broker",  isAdmin: false, email: "vijay.broker@estate.demo" },
 ];
 
-const AGENT_ROLES = ["manager", "agent"];
+const AGENT_ROLES = ["manager", "agent", "broker"];
 
 export async function seedUsers(): Promise<void> {
   try {

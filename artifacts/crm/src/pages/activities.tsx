@@ -122,7 +122,7 @@ function ScheduleDialog({ open, onClose, onSave, customers }: {
   customers: string[];
 }) {
   const { profile, role } = useRole();
-  const isSales = role === "agent";
+  const isSales = role === "agent" || role === "broker";
   const canAssignOthers = role === "owner" || role === "manager";
 
   const { data: agents } = useGetAgents();
@@ -330,7 +330,7 @@ function StatusToggle({ activity, onUpdate }: { activity: Activity; onUpdate: (i
 /* ─── Main Page ──────────────────────────────────────────────────────── */
 export default function ActivitiesPage() {
   const { profile, role } = useRole();
-  const isSales = role === "agent";
+  const isSales = role === "agent" || role === "broker";
   const canSendWhatsApp = role === "owner" || role === "manager";
   const { toast } = useToast();
   const [, setLocation] = useLocation();

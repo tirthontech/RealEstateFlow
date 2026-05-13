@@ -134,6 +134,7 @@ export default function AgentsPage() {
                     <SelectContent>
                       <SelectItem value="manager">Manager</SelectItem>
                       <SelectItem value="agent">Agent</SelectItem>
+                      <SelectItem value="broker">Broker</SelectItem>
                     </SelectContent>
                   </Select><FormMessage />
                 </FormItem>

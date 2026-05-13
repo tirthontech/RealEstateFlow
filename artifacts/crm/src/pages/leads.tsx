@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import {
-  useGetLeads, useCreateLead, useDeleteLead,
+  useGetLeads, useCreateLead, useDeleteLead, useUpdateLead,
   getGetLeadsQueryKey, getGetDashboardStatsQueryKey, getGetLeadSourcesQueryKey,
   useGetAgents,
 } from "@workspace/api-client-react";
@@ -13,6 +13,7 @@ import {
   Plus, Search, Trash2, Phone, MessageCircle, Users, Calendar,
   Clock, Home, TrendingUp, CheckCircle2, X, Download, Filter,
   RefreshCw, ChevronRight, Flame, Thermometer, Snowflake, AlertTriangle,
+  UserPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -198,6 +199,50 @@ function LeadAvatar({ name, score }: { name: string; score: number }) {
   );
 }
 
+/* ─── Assign Lead Dialog ──────────────────────────────────────────── */
+function AssignLeadDialog({ lead, agents, onAssign, onClose }: {
+  lead: { id: number; name: string };
+  agents: { id: number; name: string }[];
+  onAssign: (leadId: number, agentId: number) => void;
+  onClose: () => void;
+}) {
+  const [selectedAgentId, setSelectedAgentId] = useState<string>("");
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+      <div className="bg-card rounded-xl border border-border shadow-xl w-full max-w-sm p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-foreground flex items-center gap-2">
+            <UserPlus className="w-4 h-4 text-primary" />Assign Lead
+          </h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Assign <span className="font-semibold text-foreground">{lead.name}</span> to an agent.
+          The lead status will automatically change to <span className="font-semibold">New</span>.
+        </p>
+        <div>
+          <label className="text-xs font-medium text-muted-foreground block mb-1.5">Select Agent</label>
+          <select value={selectedAgentId} onChange={e => setSelectedAgentId(e.target.value)}
+            className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/30">
+            <option value="">— Choose an agent —</option>
+            {agents.map(a => <option key={a.id} value={String(a.id)}>{a.name}</option>)}
+          </select>
+        </div>
+        <div className="flex gap-2 pt-1">
+          <button
+            disabled={!selectedAgentId}
+            onClick={() => { if (selectedAgentId) onAssign(lead.id, Number(selectedAgentId)); }}
+            className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed">
+            Assign
+          </button>
+          <button onClick={onClose} className="flex-1 py-2 border border-border rounded-lg text-sm font-medium hover:bg-muted/50 transition-colors">Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Page ────────────────────────────────────────────────────────── */
 export default function LeadsPage() {
   const [search, setSearch]             = useState("");
@@ -205,11 +250,13 @@ export default function LeadsPage() {
   const [quickFilter, setQuickFilter]   = useState<string | null>(null);
   const [showCreate, setShowCreate]     = useState(false);
   const [scheduleLead, setScheduleLead] = useState<{ id: number; name: string } | null>(null);
+  const [assignLead, setAssignLead]     = useState<{ id: number; name: string } | null>(null);
   const qc = useQueryClient();
   const { toast } = useToast();
   const { profile, role } = useRole();
   const { user: authUser } = useAuth();
   const isSales = role === "agent";
+  const canAssign = role === "owner" || role === "manager";
   const [, setLocation] = useLocation();
 
   const { data: leads, isLoading } = useGetLeads({}, { query: { queryKey: getGetLeadsQueryKey({}) } });
@@ -238,6 +285,22 @@ export default function LeadsPage() {
       },
     },
   });
+
+  const updateLead = useUpdateLead({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getGetLeadsQueryKey() });
+        qc.invalidateQueries({ queryKey: getGetDashboardStatsQueryKey() });
+        setAssignLead(null);
+        toast({ title: "Lead assigned ✓" });
+      },
+      onError: () => toast({ title: "Failed to assign lead", variant: "destructive" }),
+    },
+  });
+
+  function handleAssign(leadId: number, agentId: number) {
+    updateLead.mutate({ id: leadId, data: { assignedTo: agentId } });
+  }
 
   const form = useForm<FormValues>({
     resolver: zodResolver(createLeadSchema),
@@ -269,8 +332,10 @@ export default function LeadsPage() {
       counts[tab.id] = allLeads.filter(l => (tab.statuses as readonly string[]).includes(l.status)).length;
     });
     counts.all = allLeads.filter(l => l.status === "new").length;
+    // unassigned count uses all leads (not filtered by agent) for owner/manager
+    counts.unassigned = (leads ?? []).filter(l => l.status === "unassigned").length;
     return counts;
-  }, [allLeads]);
+  }, [allLeads, leads]);
 
   const overdueCount = useMemo(() =>
     allLeads.filter(l => l.status === "new" && (Date.now() - new Date(l.createdAt).getTime()) > 2 * 3_600_000).length,
@@ -279,10 +344,14 @@ export default function LeadsPage() {
 
   /* Apply tab filter */
   const tabFiltered = useMemo(() => {
+    if (activeTab === "unassigned") {
+      // Show all unassigned leads (not filtered by agent)
+      return (leads ?? []).filter(l => l.status === "unassigned");
+    }
     const tab = LEAD_TABS.find(t => t.id === activeTab);
     if (!tab) return allLeads;
     return allLeads.filter(l => (tab.statuses as readonly string[]).includes(l.status));
-  }, [allLeads, activeTab]);
+  }, [allLeads, leads, activeTab]);
 
   /* Apply quick filter + search on top of tab */
   const displayed = useMemo(() => {
@@ -334,6 +403,16 @@ export default function LeadsPage() {
         />
       )}
 
+      {/* Assign Lead Dialog */}
+      {assignLead && canAssign && (
+        <AssignLeadDialog
+          lead={assignLead}
+          agents={(agents ?? []).filter(a => a.role === "agent" || a.role === "broker" || a.role === "manager")}
+          onAssign={handleAssign}
+          onClose={() => setAssignLead(null)}
+        />
+      )}
+
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -352,6 +431,19 @@ export default function LeadsPage() {
       {/* Tab navigation */}
       <div className="overflow-x-auto scrollbar-hide -mx-1 px-1">
         <div className="flex gap-0.5 border-b border-border min-w-max">
+          {canAssign && (
+            <button onClick={() => { setActiveTab("unassigned"); setQuickFilter(null); }}
+              className={cn("flex items-center gap-1.5 px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap",
+                activeTab === "unassigned" ? "border-orange-500 text-orange-600" : "border-transparent text-muted-foreground hover:text-foreground")}>
+              Unassigned
+              {tabCounts.unassigned > 0 && (
+                <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded-full",
+                  activeTab === "unassigned" ? "bg-orange-100 text-orange-700" : "bg-red-100 text-red-700 animate-pulse")}>
+                  {tabCounts.unassigned}
+                </span>
+              )}
+            </button>
+          )}
           {LEAD_TABS.map(tab => (
             <button key={tab.id} onClick={() => { setActiveTab(tab.id); setQuickFilter(null); }}
               className={cn("flex items-center gap-1.5 px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap",
@@ -520,22 +612,32 @@ export default function LeadsPage() {
                     {/* Actions */}
                     <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button title="Schedule Activity"
-                          onClick={() => setScheduleLead({ id: lead.id, name: lead.name })}
-                          className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors">
-                          <Calendar className="w-3.5 h-3.5" />
-                        </button>
-                        {lead.phone && (
-                          <button title="Call" onClick={() => window.open(`tel:${lead.phone}`)}
-                            className="p-1.5 rounded-lg hover:bg-green-50 text-green-600 transition-colors">
-                            <Phone className="w-3.5 h-3.5" />
+                        {canAssign && lead.status === "unassigned" ? (
+                          <button title="Assign to Agent"
+                            onClick={() => setAssignLead({ id: lead.id, name: lead.name })}
+                            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-orange-50 hover:bg-orange-100 text-orange-700 text-xs font-medium transition-colors">
+                            <UserPlus className="w-3 h-3" />Assign
                           </button>
+                        ) : (
+                          <>
+                            <button title="Schedule Activity"
+                              onClick={() => setScheduleLead({ id: lead.id, name: lead.name })}
+                              className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors">
+                              <Calendar className="w-3.5 h-3.5" />
+                            </button>
+                            {lead.phone && (
+                              <button title="Call" onClick={() => window.open(`tel:${lead.phone}`)}
+                                className="p-1.5 rounded-lg hover:bg-green-50 text-green-600 transition-colors">
+                                <Phone className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            <button title="WhatsApp"
+                              onClick={() => window.open(`https://wa.me/${(lead.phone ?? "").replace(/\D/g, "")}`)}
+                              className="p-1.5 rounded-lg hover:bg-emerald-50 text-emerald-600 transition-colors">
+                              <MessageCircle className="w-3.5 h-3.5" />
+                            </button>
+                          </>
                         )}
-                        <button title="WhatsApp"
-                          onClick={() => window.open(`https://wa.me/${(lead.phone ?? "").replace(/\D/g, "")}`)}
-                          className="p-1.5 rounded-lg hover:bg-emerald-50 text-emerald-600 transition-colors">
-                          <MessageCircle className="w-3.5 h-3.5" />
-                        </button>
                         <button title="Delete" data-testid={`button-delete-lead-${lead.id}`}
                           onClick={() => { if (confirm("Delete this lead?")) deleteLead.mutate({ id: lead.id }); }}
                           className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors">

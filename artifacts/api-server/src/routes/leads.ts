@@ -54,10 +54,15 @@ router.post("/leads", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
+  // If no agent assigned, lead is unassigned (owner/manager must assign it)
+  const resolvedStatus = parsed.data.assignedTo
+    ? (parsed.data.status ?? "new")
+    : "unassigned";
+
   const [lead] = await db.insert(leadsTable).values({
     ...parsed.data,
     budget: parsed.data.budget != null ? String(parsed.data.budget) : parsed.data.budget,
-    status: parsed.data.status ?? "new",
+    status: resolvedStatus,
     score: parsed.data.score ?? 50,
   }).returning();
 
@@ -67,9 +72,13 @@ router.post("/leads", async (req, res): Promise<void> => {
     agentName = agent?.name ?? null;
   }
 
+  const activityDesc = lead.assignedTo
+    ? `Agent created direct lead`
+    : `Portal lead received — awaiting assignment`;
+
   await db.insert(activityTable).values({
     type: "lead_created",
-    description: `New lead created`,
+    description: activityDesc,
     entityName: lead.name,
     agentId: lead.assignedTo ?? undefined,
   });
@@ -109,12 +118,21 @@ router.put("/leads/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
+  // Fetch previous state to detect assignment changes
+  const [prevLead] = await db.select().from(leadsTable).where(eq(leadsTable.id, params.data.id));
+
+  // If assigning from unassigned → set status to "new" automatically
+  const updateData: Record<string, unknown> = {
+    ...parsed.data,
+    budget: parsed.data.budget != null ? String(parsed.data.budget) : parsed.data.budget,
+  };
+  if (parsed.data.assignedTo && prevLead?.status === "unassigned") {
+    updateData.status = "new";
+  }
+
   const [lead] = await db
     .update(leadsTable)
-    .set({
-      ...parsed.data,
-      budget: parsed.data.budget != null ? String(parsed.data.budget) : parsed.data.budget,
-    })
+    .set(updateData)
     .where(eq(leadsTable.id, params.data.id))
     .returning();
   if (!lead) {
@@ -126,6 +144,24 @@ router.put("/leads/:id", async (req, res): Promise<void> => {
     const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, lead.assignedTo));
     agentName = agent?.name ?? null;
   }
+
+  // Log assignment event
+  if (parsed.data.assignedTo && parsed.data.assignedTo !== prevLead?.assignedTo) {
+    await db.insert(activityTable).values({
+      type: "lead_created",
+      description: `Lead assigned to ${agentName ?? "agent"}`,
+      entityName: lead.name,
+      agentId: lead.assignedTo ?? undefined,
+    });
+  } else if (parsed.data.status && parsed.data.status !== prevLead?.status) {
+    await db.insert(activityTable).values({
+      type: "lead_created",
+      description: `Agent updated lead stage to ${parsed.data.status}`,
+      entityName: lead.name,
+      agentId: lead.assignedTo ?? undefined,
+    });
+  }
+
   res.json(formatLead(lead, agentName));
 });
 

@@ -35,15 +35,16 @@ export function timeAgo(dateStr: string): string {
   return `${days}d ago`;
 }
 
-export const LEAD_STATUSES = ["new", "contacted", "qualified", "proposal", "negotiation", "closed_won", "closed_lost"] as const;
+export const LEAD_STATUSES = ["unassigned", "new", "contacted", "qualified", "proposal", "negotiation", "closed_won", "closed_lost"] as const;
 export const DEAL_STAGES = ["prospect", "viewing", "offer", "under_contract", "due_diligence", "closed_won", "closed_lost"] as const;
 export const LEAD_SOURCES = ["99acres", "magicbricks", "housing", "facebook", "google", "whatsapp", "referral", "walk_in", "website", "phone", "email", "other"] as const;
 export const PROPERTY_TYPES = ["residential", "commercial", "land", "rental"] as const;
 export const PROPERTY_STATUSES = ["available", "under_offer", "sold", "withdrawn"] as const;
-export const AGENT_ROLES = ["manager", "agent"] as const;
+export const AGENT_ROLES = ["manager", "agent", "broker"] as const;
 
 export function statusColor(status: string): string {
   const map: Record<string, string> = {
+    unassigned: "bg-slate-100 text-slate-600",
     new: "bg-blue-100 text-blue-700",
     contacted: "bg-purple-100 text-purple-700",
     qualified: "bg-amber-100 text-amber-700",

@@ -5,7 +5,7 @@ import { db, usersTable, agentsTable } from "@workspace/db";
 import { authMiddleware, adminMiddleware } from "../middlewares/auth";
 
 // Roles that need an agent record in the agents table
-const AGENT_ROLES = ["manager", "agent"];
+const AGENT_ROLES = ["manager", "agent", "broker"];
 
 const router = Router();
 
@@ -37,7 +37,7 @@ router.post("/admin/users", async (req, res): Promise<void> => {
     return;
   }
   if (AGENT_ROLES.includes(String(role)) && !email) {
-    res.status(400).json({ error: "Email is required for manager/agent roles" });
+    res.status(400).json({ error: "Email is required for manager/agent/broker roles" });
     return;
   }
 
