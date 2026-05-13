@@ -25,6 +25,7 @@ import { useToast } from "@/hooks/use-toast";
 import { statusColor, stageLabel, formatCurrency, formatDate, LEAD_STATUSES, LEAD_SOURCES, PROPERTY_TYPES, scoreColor, cn } from "@/lib/utils";
 import { useRole } from "@/lib/role-context";
 import { useAuth } from "@/lib/auth-context";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 
 /* ─── Config ───────────────────────────────────────────────────────── */
 const SOURCE_COLORS: Record<string, string> = {
@@ -299,6 +300,8 @@ export default function LeadsPage() {
   const [showCreate, setShowCreate]     = useState(false);
   const [scheduleLead, setScheduleLead] = useState<{ id: number; name: string } | null>(null);
   const [assignLead, setAssignLead]     = useState<Lead | null>(null);
+  const [deleteLeadId, setDeleteLeadId] = useState<number | null>(null);
+  const [deleteLeadName, setDeleteLeadName] = useState("");
   const qc = useQueryClient();
   const { toast } = useToast();
   const { profile, role } = useRole();
@@ -329,8 +332,10 @@ export default function LeadsPage() {
       onSuccess: () => {
         qc.invalidateQueries({ queryKey: getGetLeadsQueryKey() });
         qc.invalidateQueries({ queryKey: getGetDashboardStatsQueryKey() });
+        setDeleteLeadId(null);
         toast({ title: "Lead deleted" });
       },
+      onError: () => toast({ title: "Failed to delete lead", variant: "destructive" }),
     },
   });
 
@@ -686,11 +691,13 @@ export default function LeadsPage() {
                             </button>
                           </>
                         )}
-                        <button title="Delete" data-testid={`button-delete-lead-${lead.id}`}
-                          onClick={() => { if (confirm("Delete this lead?")) deleteLead.mutate({ id: lead.id }); }}
-                          className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {role === "owner" && (
+                          <button title="Delete" data-testid={`button-delete-lead-${lead.id}`}
+                            onClick={() => { setDeleteLeadName(lead.name); setDeleteLeadId(lead.id); }}
+                            className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -709,6 +716,15 @@ export default function LeadsPage() {
           </div>
         </div>
       )}
+
+      <ConfirmDeleteDialog
+        open={deleteLeadId !== null}
+        onOpenChange={(open) => { if (!open) setDeleteLeadId(null); }}
+        onConfirm={() => deleteLeadId && deleteLead.mutate({ id: deleteLeadId })}
+        title="Delete Lead"
+        description={`Are you sure you want to delete "${deleteLeadName}"? Their viewings and activities will also be removed. This action cannot be undone.`}
+        loading={deleteLead.isPending}
+      />
 
       {/* Create Lead Dialog */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>

@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, and, type SQL } from "drizzle-orm";
 import { db, dealsTable, leadsTable, propertiesTable, agentsTable, activityTable } from "@workspace/db";
+import { ownerMiddleware } from "../middlewares/auth";
 import {
   CreateDealBody,
   UpdateDealBody,
@@ -139,18 +140,25 @@ router.put("/deals/:id", async (req, res): Promise<void> => {
   res.json(await formatDeal(deal));
 });
 
-router.delete("/deals/:id", async (req, res): Promise<void> => {
+router.delete("/deals/:id", ownerMiddleware as any, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid id" });
     return;
   }
-  const [deal] = await db.delete(dealsTable).where(eq(dealsTable.id, id)).returning();
+  const [deal] = await db.select().from(dealsTable).where(eq(dealsTable.id, id));
   if (!deal) {
     res.status(404).json({ error: "Deal not found" });
     return;
   }
+  await db.delete(dealsTable).where(eq(dealsTable.id, id));
+  await db.insert(activityTable).values({
+    type: "deal_deleted",
+    description: `Deal deleted`,
+    entityName: deal.title,
+    agentId: deal.agentId ?? undefined,
+  });
   res.sendStatus(204);
 });
 

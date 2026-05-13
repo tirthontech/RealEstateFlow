@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike, and, type SQL } from "drizzle-orm";
-import { db, leadsTable, agentsTable, activityTable, notificationsTable, usersTable } from "@workspace/db";
+import { db, leadsTable, agentsTable, activityTable, notificationsTable, usersTable, viewingsTable, dealsTable, scheduledActivitiesTable } from "@workspace/db";
+import { ownerMiddleware } from "../middlewares/auth";
 import {
   CreateLeadBody,
   UpdateLeadBody,
@@ -211,18 +212,29 @@ router.put("/leads/:id", async (req, res): Promise<void> => {
   res.json(formatLead(lead, agentName));
 });
 
-router.delete("/leads/:id", async (req, res): Promise<void> => {
+router.delete("/leads/:id", ownerMiddleware as any, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid id" });
     return;
   }
-  const [lead] = await db.delete(leadsTable).where(eq(leadsTable.id, id)).returning();
+  const [lead] = await db.select().from(leadsTable).where(eq(leadsTable.id, id));
   if (!lead) {
     res.status(404).json({ error: "Lead not found" });
     return;
   }
+  // Cascade: delete viewings, scheduled activities, notifications; unlink deals
+  await db.delete(viewingsTable).where(eq(viewingsTable.leadId, id));
+  await db.delete(scheduledActivitiesTable).where(eq(scheduledActivitiesTable.leadId, id));
+  await db.delete(notificationsTable).where(eq(notificationsTable.leadId, id));
+  await db.update(dealsTable).set({ leadId: null }).where(eq(dealsTable.leadId, id));
+  await db.delete(leadsTable).where(eq(leadsTable.id, id));
+  await db.insert(activityTable).values({
+    type: "lead_deleted",
+    description: `Lead deleted`,
+    entityName: lead.name,
+  });
   res.sendStatus(204);
 });
 

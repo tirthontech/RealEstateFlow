@@ -23,6 +23,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useRole } from "@/lib/role-context";
 import { useAuth } from "@/lib/auth-context";
 import { statusColor, stageLabel, formatCurrency, PROPERTY_TYPES, PROPERTY_STATUSES, cn } from "@/lib/utils";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 
 /* ─── Types ──────────────────────────────────────────────────────────── */
 interface Unit {
@@ -285,6 +286,8 @@ function UnitsPanel({
   const [costSheetUnit, setCostSheetUnit] = useState<Unit | null>(null);
   const [blockModal, setBlockModal] = useState<Unit | null>(null);
   const [selectedLeadId, setSelectedLeadId] = useState("");
+  const [deleteUnitId, setDeleteUnitId] = useState<number | null>(null);
+  const [deleteUnitNo, setDeleteUnitNo] = useState("");
 
   const apiFetch = useCallback(async (path: string, opts: RequestInit = {}) => {
     const res = await fetch(path, {
@@ -306,8 +309,7 @@ function UnitsPanel({
   useEffect(() => { loadUnits(); }, [loadUnits]);
 
   async function deleteUnit(id: number) {
-    if (!confirm("Delete this unit?")) return;
-    try { await apiFetch(`/api/units/${id}`, { method: "DELETE" }); setUnits(u => u.filter(x => x.id !== id)); toast({ title: "Unit deleted" }); }
+    try { await apiFetch(`/api/units/${id}`, { method: "DELETE" }); setUnits(u => u.filter(x => x.id !== id)); setDeleteUnitId(null); toast({ title: "Unit deleted" }); }
     catch (e: any) { toast({ title: e.message, variant: "destructive" }); }
   }
 
@@ -329,6 +331,13 @@ function UnitsPanel({
 
   return (
     <div className="mt-3 border-t border-border pt-3" onClick={e => e.stopPropagation()}>
+      <ConfirmDeleteDialog
+        open={deleteUnitId !== null}
+        onOpenChange={(open) => { if (!open) setDeleteUnitId(null); }}
+        onConfirm={() => deleteUnitId && deleteUnit(deleteUnitId)}
+        title="Delete Unit"
+        description={`Are you sure you want to delete unit "${deleteUnitNo}"? This action cannot be undone.`}
+      />
       {/* Summary pills */}
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         {(["available","blocked","booked","sold"] as const).map(s => (
@@ -422,7 +431,7 @@ function UnitsPanel({
                       className="p-1 rounded hover:bg-primary/10 text-primary transition-colors">
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
-                    <button onClick={() => deleteUnit(unit.id)} title="Delete"
+                    <button onClick={() => { setDeleteUnitNo(unit.unitNo); setDeleteUnitId(unit.id); }} title="Delete"
                       className="p-1 rounded hover:bg-destructive/10 text-destructive transition-colors">
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -567,6 +576,8 @@ export default function PropertiesPage() {
   const [siteVisitProp, setSiteVisitProp] = useState<{ id: number; title: string } | null>(null);
   const [infoCard, setInfoCard] = useState<number | null>(null);
   const [inventoryCard, setInventoryCard] = useState<number | null>(null); // which property shows units panel
+  const [deletePropId, setDeletePropId] = useState<number | null>(null);
+  const [deletePropTitle, setDeletePropTitle] = useState("");
   const qc = useQueryClient();
   const { toast } = useToast();
   const { role } = useRole();
@@ -602,8 +613,10 @@ export default function PropertiesPage() {
       onSuccess: () => {
         qc.invalidateQueries({ queryKey: getGetPropertiesQueryKey() });
         qc.invalidateQueries({ queryKey: getGetDashboardStatsQueryKey() });
+        setDeletePropId(null);
         toast({ title: "Property deleted" });
       },
+      onError: () => toast({ title: "Failed to delete property", variant: "destructive" }),
     },
   });
 
@@ -621,6 +634,14 @@ export default function PropertiesPage() {
       {siteVisitProp && (
         <SiteVisitDialog propertyTitle={siteVisitProp.title} open={!!siteVisitProp} onClose={() => setSiteVisitProp(null)} />
       )}
+      <ConfirmDeleteDialog
+        open={deletePropId !== null}
+        onOpenChange={(open) => { if (!open) setDeletePropId(null); }}
+        onConfirm={() => deletePropId && deleteProperty.mutate({ id: deletePropId })}
+        title="Delete Property"
+        description={`Are you sure you want to delete "${deletePropTitle}" and all its units? This action cannot be undone.`}
+        loading={deleteProperty.isPending}
+      />
 
       <div className="flex items-center justify-between">
         <div>
@@ -684,10 +705,10 @@ export default function PropertiesPage() {
                       <MapPin className="w-3 h-3 flex-shrink-0" />{prop.address}, {prop.city}
                     </p>
                   </div>
-                  {!isSales && (
+                  {role === "owner" && (
                     <Button size="icon" variant="ghost" className="h-7 w-7 flex-shrink-0 text-destructive hover:text-destructive ml-2"
                       data-testid={`button-delete-property-${prop.id}`}
-                      onClick={(e) => { e.stopPropagation(); if (confirm("Delete this project and all its units?")) deleteProperty.mutate({ id: prop.id }); }}>
+                      onClick={(e) => { e.stopPropagation(); setDeletePropTitle(prop.title); setDeletePropId(prop.id); }}>
                       <Trash2 className="w-3.5 h-3.5" />
                     </Button>
                   )}

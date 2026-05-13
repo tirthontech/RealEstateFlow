@@ -41,3 +41,11 @@ export function adminMiddleware(req: Request, res: Response, next: NextFunction)
   }
   next();
 }
+
+export function ownerMiddleware(req: Request, res: Response, next: NextFunction): void {
+  if (req.user?.role !== "owner") {
+    res.status(403).json({ error: "Owner access required" });
+    return;
+  }
+  next();
+}

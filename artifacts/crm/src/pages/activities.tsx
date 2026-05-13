@@ -3,13 +3,14 @@ import { useGetLeads, useGetAgents, useGetProperties, getGetLeadsQueryKey, getGe
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Phone, Home, TrendingUp, CheckCircle2, Clock, Search, Plus, Download,
-  Calendar, MessageSquare, ChevronRight, X, ArrowUpDown, MessageCircle, Loader2,
+  Calendar, MessageSquare, ChevronRight, X, ArrowUpDown, MessageCircle, Loader2, Trash2,
 } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { useRole } from "@/lib/role-context";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { useActivities, type ScheduledActivity, type CreateActivityInput, type UpdateActivityInput } from "@/lib/use-activities";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 
 /* ─── Types ───────────────────────────────────────────────────────────── */
 type ActivityType =
@@ -343,7 +344,7 @@ function StatusToggle({ activity, onUpdate }: { activity: Activity; onUpdate: (i
 function SkeletonRow() {
   return (
     <tr className="animate-pulse">
-      {Array.from({ length: 10 }).map((_, i) => (
+      {Array.from({ length: 11 }).map((_, i) => (
         <td key={i} className="px-3 py-3">
           <div className="h-3 bg-muted rounded w-full max-w-[80px]" />
         </td>
@@ -360,7 +361,7 @@ export default function ActivitiesPage() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
 
-  const { data: rawActivities, isLoading, create, update } = useActivities();
+  const { data: rawActivities, isLoading, create, update, remove } = useActivities();
   const activities = useMemo(() => rawActivities.map(toActivity), [rawActivities]);
 
   const [timeTab, setTimeTab] = useState<string>(isSales ? "assignee" : "overall");
@@ -368,6 +369,8 @@ export default function ActivitiesPage() {
   const [search, setSearch] = useState("");
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [sortAsc, setSortAsc] = useState(true);
+  const [deleteActivityId, setDeleteActivityId] = useState<number | null>(null);
+  const [deleteActivityCustomer, setDeleteActivityCustomer] = useState("");
 
   const { data: leads } = useGetLeads({}, { query: { queryKey: getGetLeadsQueryKey({}) } });
   const customerNames = useMemo(() => (leads ?? []).map(l => l.name), [leads]);
@@ -444,6 +447,21 @@ export default function ActivitiesPage() {
   return (
     <div className="p-4 sm:p-6 space-y-4">
       <ScheduleDialog open={scheduleOpen} onClose={() => setScheduleOpen(false)} onSave={handleAddActivity} customers={customerNames} />
+      <ConfirmDeleteDialog
+        open={deleteActivityId !== null}
+        onOpenChange={(open) => { if (!open) setDeleteActivityId(null); }}
+        onConfirm={() => {
+          if (deleteActivityId) {
+            remove.mutate(deleteActivityId, {
+              onSuccess: () => { setDeleteActivityId(null); toast({ title: "Activity deleted" }); },
+              onError: () => toast({ title: "Failed to delete activity", variant: "destructive" }),
+            });
+          }
+        }}
+        title="Delete Activity"
+        description={`Are you sure you want to delete the activity for "${deleteActivityCustomer}"? This action cannot be undone.`}
+        loading={remove.isPending}
+      />
 
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
@@ -516,7 +534,7 @@ export default function ActivitiesPage() {
                 {[
                   "Customer", "Phone", "Employee", "Created Date",
                   "Scheduled Activity", "Source Name", "Activity Date",
-                  "Activity Time", "Last Remark", "Status",
+                  "Activity Time", "Last Remark", "Status", "",
                 ].map(label => (
                   <th key={label} className="text-left px-3 py-3 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">
                     {label === "Activity Date" ? (
@@ -532,7 +550,7 @@ export default function ActivitiesPage() {
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} />)
               ) : displayed.length === 0 ? (
-                <tr><td colSpan={10} className="py-12 text-center text-sm text-muted-foreground">No activities found</td></tr>
+                <tr><td colSpan={11} className="py-12 text-center text-sm text-muted-foreground">No activities found</td></tr>
               ) : displayed.map(act => {
                 const typeConf = activityTypeConfig(act.activityType);
                 const isToday = act.activityDate === todayStr();
@@ -579,6 +597,17 @@ export default function ActivitiesPage() {
                     </td>
                     <td className="px-3 py-3">
                       <StatusToggle activity={act} onUpdate={updateActivity} />
+                    </td>
+                    <td className="px-3 py-3">
+                      {(role === "owner" || isSales) && (
+                        <button
+                          onClick={() => { setDeleteActivityCustomer(act.customer); setDeleteActivityId(act.id); }}
+                          className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                          title="Delete activity"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 );

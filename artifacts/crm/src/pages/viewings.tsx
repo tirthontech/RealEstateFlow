@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { cn, formatCurrency } from "@/lib/utils";
+import { useRole } from "@/lib/role-context";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 
 type Status = "confirmed" | "pending" | "completed" | "no_show" | "cancelled";
 
@@ -71,9 +73,12 @@ function useDeleteViewing() {
 
 export default function ViewingsPage() {
   const { toast } = useToast();
+  const { role } = useRole();
+  const isOwner = role === "owner";
   const [showAdd, setShowAdd] = useState(false);
   const [filterStatus, setFilterStatus] = useState<Status | "all">("all");
   const [newViewing, setNewViewing] = useState({ leadId: "", propertyId: "", agentId: "", date: "", time: "10:00", notes: "" });
+  const [deleteViewingId, setDeleteViewingId] = useState<number | null>(null);
 
   const { data: viewings = [], isLoading } = useViewings();
   const { data: leads } = useGetLeads({}, { query: { queryKey: getGetLeadsQueryKey() } });
@@ -119,7 +124,7 @@ export default function ViewingsPage() {
 
   function handleDelete(id: number) {
     deleteViewing.mutate(id, {
-      onSuccess: () => toast({ title: "Viewing removed" }),
+      onSuccess: () => { setDeleteViewingId(null); toast({ title: "Viewing removed" }); },
       onError: () => toast({ title: "Failed to delete viewing", variant: "destructive" }),
     });
   }
@@ -131,6 +136,14 @@ export default function ViewingsPage() {
 
   return (
     <div className="p-6 space-y-5">
+      <ConfirmDeleteDialog
+        open={deleteViewingId !== null}
+        onOpenChange={(open) => { if (!open) setDeleteViewingId(null); }}
+        onConfirm={() => deleteViewingId && handleDelete(deleteViewingId)}
+        title="Delete Viewing"
+        description="Are you sure you want to delete this viewing? This action cannot be undone."
+        loading={deleteViewing.isPending}
+      />
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
@@ -292,10 +305,12 @@ export default function ViewingsPage() {
                         </Button>
                       </>
                     )}
-                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                      onClick={() => { if (confirm("Delete this viewing?")) handleDelete(v.id); }}>
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
+                    {isOwner && (
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                        onClick={() => setDeleteViewingId(v.id)}>
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    )}
                   </div>
                 </div>
               </div>

@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, and, type SQL } from "drizzle-orm";
-import { db, propertiesTable, agentsTable, activityTable } from "@workspace/db";
+import { db, propertiesTable, agentsTable, activityTable, dealsTable, viewingsTable, scheduledActivitiesTable, unitsTable } from "@workspace/db";
+import { ownerMiddleware } from "../middlewares/auth";
 import {
   CreatePropertyBody,
   UpdatePropertyBody,
@@ -122,18 +123,29 @@ router.put("/properties/:id", async (req, res): Promise<void> => {
   res.json(formatProperty(prop, agentName));
 });
 
-router.delete("/properties/:id", async (req, res): Promise<void> => {
+router.delete("/properties/:id", ownerMiddleware as any, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid id" });
     return;
   }
-  const [prop] = await db.delete(propertiesTable).where(eq(propertiesTable.id, id)).returning();
+  const [prop] = await db.select().from(propertiesTable).where(eq(propertiesTable.id, id));
   if (!prop) {
     res.status(404).json({ error: "Property not found" });
     return;
   }
+  // Cascade: delete units; unlink deals, viewings, scheduled activities
+  await db.delete(unitsTable).where(eq(unitsTable.propertyId, id));
+  await db.update(dealsTable).set({ propertyId: null }).where(eq(dealsTable.propertyId, id));
+  await db.update(viewingsTable).set({ propertyId: null }).where(eq(viewingsTable.propertyId, id));
+  await db.update(scheduledActivitiesTable).set({ propertyId: null }).where(eq(scheduledActivitiesTable.propertyId, id));
+  await db.delete(propertiesTable).where(eq(propertiesTable.id, id));
+  await db.insert(activityTable).values({
+    type: "property_deleted",
+    description: `Property deleted`,
+    entityName: prop.title,
+  });
   res.sendStatus(204);
 });
 

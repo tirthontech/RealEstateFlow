@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { useRole } from "@/lib/role-context";
 import { statusColor, stageLabel, formatCurrency, DEAL_STAGES } from "@/lib/utils";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 
 const STAGES = DEAL_STAGES as unknown as string[];
 
@@ -46,7 +47,7 @@ type Deal = {
   updatedAt: string;
 };
 
-function DealCard({ deal, onDelete, onStageChange }: { deal: Deal; onDelete: () => void; onStageChange: (stage: string) => void }) {
+function DealCard({ deal, onDelete, onStageChange, canDelete }: { deal: Deal; onDelete: () => void; onStageChange: (stage: string) => void; canDelete?: boolean }) {
   const [dragging, setDragging] = useState(false);
   return (
     <div
@@ -58,11 +59,13 @@ function DealCard({ deal, onDelete, onStageChange }: { deal: Deal; onDelete: () 
     >
       <div className="flex items-start justify-between gap-2">
         <p className="font-medium text-sm text-foreground leading-snug flex-1">{deal.title}</p>
-        <Button size="icon" variant="ghost" className="h-6 w-6 flex-shrink-0 text-muted-foreground hover:text-destructive"
-          data-testid={`button-delete-deal-${deal.id}`}
-          onClick={(e) => { e.stopPropagation(); if (confirm("Delete?")) onDelete(); }}>
-          <Trash2 className="w-3 h-3" />
-        </Button>
+        {canDelete && (
+          <Button size="icon" variant="ghost" className="h-6 w-6 flex-shrink-0 text-muted-foreground hover:text-destructive"
+            data-testid={`button-delete-deal-${deal.id}`}
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}>
+            <Trash2 className="w-3 h-3" />
+          </Button>
+        )}
       </div>
       <p className="text-base font-bold text-primary mt-1">{formatCurrency(deal.value)}</p>
       {deal.leadName && <p className="text-xs text-muted-foreground mt-1.5">{deal.leadName}</p>}
@@ -72,11 +75,12 @@ function DealCard({ deal, onDelete, onStageChange }: { deal: Deal; onDelete: () 
   );
 }
 
-function KanbanColumn({ stage, deals, onDelete, onDrop }: {
+function KanbanColumn({ stage, deals, onDelete, onDrop, canDelete }: {
   stage: string;
   deals: Deal[];
   onDelete: (id: number) => void;
   onDrop: (dealId: number, stage: string) => void;
+  canDelete?: boolean;
 }) {
   const [over, setOver] = useState(false);
   const total = deals.reduce((s, d) => s + d.value, 0);
@@ -102,7 +106,7 @@ function KanbanColumn({ stage, deals, onDelete, onDrop }: {
       </div>
       <div className="p-2 space-y-2 flex-1 min-h-20 overflow-y-auto max-h-[calc(100vh-240px)]">
         {deals.map((deal) => (
-          <DealCard key={deal.id} deal={deal} onDelete={() => onDelete(deal.id)} onStageChange={(s) => onDrop(deal.id, s)} />
+          <DealCard key={deal.id} deal={deal} onDelete={() => onDelete(deal.id)} onStageChange={(s) => onDrop(deal.id, s)} canDelete={canDelete} />
         ))}
         {deals.length === 0 && (
           <div className="flex items-center justify-center h-16 text-xs text-muted-foreground/50">Drop here</div>
@@ -114,10 +118,13 @@ function KanbanColumn({ stage, deals, onDelete, onDrop }: {
 
 export default function DealsPage() {
   const [showCreate, setShowCreate] = useState(false);
+  const [deleteDealId, setDeleteDealId] = useState<number | null>(null);
+  const [deleteDealTitle, setDeleteDealTitle] = useState("");
   const qc = useQueryClient();
   const { toast } = useToast();
   const { role, profile } = useRole();
   const isSales = role === "agent" || role === "broker";
+  const isOwner = role === "owner";
 
   const { data: allDeals, isLoading } = useGetDeals({}, { query: { queryKey: getGetDealsQueryKey() } });
   const { data: leads } = useGetLeads({}, { query: { queryKey: ["leads"] } });
@@ -158,8 +165,10 @@ export default function DealsPage() {
         qc.invalidateQueries({ queryKey: getGetDealsQueryKey() });
         qc.invalidateQueries({ queryKey: getGetDashboardStatsQueryKey() });
         qc.invalidateQueries({ queryKey: getGetDashboardPipelineQueryKey() });
+        setDeleteDealId(null);
         toast({ title: "Deal deleted" });
       },
+      onError: () => toast({ title: "Failed to delete deal", variant: "destructive" }),
     },
   });
 
@@ -222,12 +231,26 @@ export default function DealsPage() {
               key={stage}
               stage={stage}
               deals={dealsByStage(stage)}
-              onDelete={(id) => deleteDeal.mutate({ id })}
+              onDelete={(id) => {
+                const deal = (deals ?? []).find(d => d.id === id);
+                setDeleteDealTitle(deal?.title ?? "this deal");
+                setDeleteDealId(id);
+              }}
               onDrop={handleDrop}
+              canDelete={isOwner}
             />
           ))}
         </div>
       )}
+
+      <ConfirmDeleteDialog
+        open={deleteDealId !== null}
+        onOpenChange={(open) => { if (!open) setDeleteDealId(null); }}
+        onConfirm={() => deleteDealId && deleteDeal.mutate({ id: deleteDealId })}
+        title="Delete Deal"
+        description={`Are you sure you want to delete "${deleteDealTitle}"? This action cannot be undone.`}
+        loading={deleteDeal.isPending}
+      />
 
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
         <DialogContent className="max-w-lg">

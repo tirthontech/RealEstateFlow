@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, and, type SQL } from "drizzle-orm";
-import { db, viewingsTable, leadsTable, propertiesTable, agentsTable } from "@workspace/db";
+import { db, viewingsTable, leadsTable, propertiesTable, agentsTable, activityTable } from "@workspace/db";
+import { ownerMiddleware } from "../middlewares/auth";
 
 const router: IRouter = Router();
 
@@ -108,11 +109,19 @@ router.put("/viewings/:id", async (req, res): Promise<void> => {
   res.json(await formatViewing(viewing));
 });
 
-router.delete("/viewings/:id", async (req, res): Promise<void> => {
+router.delete("/viewings/:id", ownerMiddleware as any, async (req, res): Promise<void> => {
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
-  const [viewing] = await db.delete(viewingsTable).where(eq(viewingsTable.id, id)).returning();
+  const [viewing] = await db.select().from(viewingsTable).where(eq(viewingsTable.id, id));
   if (!viewing) { res.status(404).json({ error: "Viewing not found" }); return; }
+  await db.delete(viewingsTable).where(eq(viewingsTable.id, id));
+  const entityName = viewing.leadId ? `Viewing #${id}` : `Viewing #${id}`;
+  await db.insert(activityTable).values({
+    type: "viewing_deleted",
+    description: `Viewing deleted`,
+    entityName,
+    agentId: viewing.agentId ?? undefined,
+  });
   res.sendStatus(204);
 });
 
