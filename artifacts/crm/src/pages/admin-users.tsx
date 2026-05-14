@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Plus, Trash2, ShieldCheck, ShieldOff, Edit2, X, Eye, EyeOff, UserCheck,
 } from "lucide-react";
@@ -7,6 +8,7 @@ import { useAuth } from "@/lib/auth-context";
 import { ROLE_PROFILES, type UserRole } from "@/lib/role-context";
 import { AGENT_ROLES } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { getGetAgentsQueryKey } from "@workspace/api-client-react";
 
 interface PlatformUser {
   id: number;
@@ -18,10 +20,10 @@ interface PlatformUser {
   createdAt: string;
 }
 
-const ROLE_OPTIONS: { value: UserRole; label: string }[] = ROLE_PROFILES.map(r => ({
-  value: r.value,
-  label: r.label,
-}));
+// owner cannot be created via user management UI — only one owner exists
+const ROLE_OPTIONS: { value: UserRole; label: string }[] = ROLE_PROFILES
+  .filter(r => r.value !== "owner")
+  .map(r => ({ value: r.value, label: r.label }));
 
 const ROLE_COLORS: Record<string, string> = {
   owner:   "bg-amber-100 text-amber-800",
@@ -45,6 +47,7 @@ export default function AdminUsersPage() {
   const { token, user: me } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const qc = useQueryClient();
 
   const [users, setUsers] = useState<PlatformUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -91,8 +94,13 @@ export default function AdminUsersPage() {
     }
     setSaving(true);
     try {
-      await apiFetch("/admin/users", { method: "POST", body: JSON.stringify(form) });
-      toast({ title: `User "${form.username}" created` });
+      const result = await apiFetch("/admin/users", { method: "POST", body: JSON.stringify(form) });
+      const agentCreated = result?.agentCreated ?? false;
+      toast({
+        title: `User "${form.username}" created`,
+        description: agentCreated ? "Agent profile created — visible in the Agents section." : undefined,
+      });
+      if (agentCreated) qc.invalidateQueries({ queryKey: getGetAgentsQueryKey() });
       setShowCreate(false);
       setForm({ ...EMPTY_FORM });
       await loadUsers();
@@ -109,6 +117,9 @@ export default function AdminUsersPage() {
       if (form.password) body.password = form.password;
       await apiFetch(`/admin/users/${editUser.id}`, { method: "PUT", body: JSON.stringify(body) });
       toast({ title: "User updated" });
+      const roleChanged = editUser.role !== form.role;
+      const agentRoleInvolved = AGENT_ROLES.includes(editUser.role as any) || AGENT_ROLES.includes(form.role as any);
+      if (roleChanged && agentRoleInvolved) qc.invalidateQueries({ queryKey: getGetAgentsQueryKey() });
       setEditUser(null);
       await loadUsers();
     } catch (e: any) {
@@ -124,6 +135,7 @@ export default function AdminUsersPage() {
     try {
       await apiFetch(`/admin/users/${u.id}`, { method: "DELETE" });
       toast({ title: "User deleted" });
+      if (AGENT_ROLES.includes(u.role as any)) qc.invalidateQueries({ queryKey: getGetAgentsQueryKey() });
       await loadUsers();
     } catch (e: any) {
       toast({ title: "Error deleting user", description: e.message, variant: "destructive" });
