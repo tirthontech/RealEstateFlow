@@ -56,12 +56,12 @@ router.get("/leads", async (req, res): Promise<void> => {
 router.post("/leads", async (req, res): Promise<void> => {
   const parsed = CreateLeadBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+    res.status(400).json({ error: parsed.error.issues?.[0]?.message ?? parsed.error.message });
     return;
   }
   const user = req.user!;
 
-  // Field roles auto-assign the lead to themselves
+  // Field roles auto-assign to themselves
   let assignedTo = parsed.data.assignedTo ?? null;
   if (FIELD_ROLES.includes(user.role) && user.agentId) {
     assignedTo = user.agentId;
@@ -69,8 +69,16 @@ router.post("/leads", async (req, res): Promise<void> => {
 
   const resolvedStatus = assignedTo ? (parsed.data.status ?? "new") : "unassigned";
 
+  const { name, phone, source, propertyType, notes } = parsed.data;
+  const email = parsed.data.email ?? "";
+
   const [lead] = await db.insert(leadsTable).values({
-    ...parsed.data,
+    name,
+    email,
+    phone: phone ?? null,
+    source,
+    propertyType: propertyType ?? null,
+    notes: notes ?? null,
     assignedTo,
     createdBy: user.id,
     budget: parsed.data.budget != null ? String(parsed.data.budget) : null,
@@ -84,19 +92,19 @@ router.post("/leads", async (req, res): Promise<void> => {
     agentName = agent?.name ?? null;
   }
 
-  await db.insert(activityTable).values({
+  // Fire-and-forget side-effects — never let these break the main response
+  db.insert(activityTable).values({
     type: "lead_created",
     description: lead.assignedTo ? `Lead added by agent` : `Portal lead received — awaiting assignment`,
     entityName: lead.name,
     agentId: lead.assignedTo ?? undefined,
-  });
+  }).catch(() => {});
 
-  // Notify owners and managers about unassigned leads
   if (!lead.assignedTo) {
-    await db.insert(notificationsTable).values([
+    db.insert(notificationsTable).values([
       { type: "portal_lead", title: "New lead received", message: `${lead.name} from ${lead.source} is awaiting assignment`, leadId: lead.id, targetRole: "owner" },
       { type: "portal_lead", title: "New lead received", message: `${lead.name} from ${lead.source} is awaiting assignment`, leadId: lead.id, targetRole: "manager" },
-    ]);
+    ]).catch(() => {});
   }
 
   res.status(201).json(formatLead(lead, agentName));

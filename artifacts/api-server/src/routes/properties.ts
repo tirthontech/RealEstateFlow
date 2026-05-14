@@ -60,12 +60,12 @@ router.post("/properties", async (req, res): Promise<void> => {
     agentName = agent?.name ?? null;
   }
 
-  await db.insert(activityTable).values({
+  db.insert(activityTable).values({
     type: "property_added",
     description: `New property listed`,
     entityName: prop.title,
     agentId: prop.agentId ?? undefined,
-  });
+  }).catch(() => {});
 
   res.status(201).json(formatProperty(prop, agentName));
 });
@@ -141,11 +141,11 @@ router.delete("/properties/:id", ownerMiddleware as any, async (req, res): Promi
   await db.update(viewingsTable).set({ propertyId: null }).where(eq(viewingsTable.propertyId, id));
   await db.update(scheduledActivitiesTable).set({ propertyId: null }).where(eq(scheduledActivitiesTable.propertyId, id));
   await db.delete(propertiesTable).where(eq(propertiesTable.id, id));
-  await db.insert(activityTable).values({
+  db.insert(activityTable).values({
     type: "property_deleted",
     description: `Property deleted`,
     entityName: prop.title,
-  });
+  }).catch(() => {});
   res.sendStatus(204);
 });
 

@@ -398,7 +398,13 @@ function EditLeadDialog({ lead, agents, isSales, isPending, onSave, onClose }: {
                   <FormItem className="col-span-2"><FormLabel>Assign to Agent</FormLabel>
                     <Select value={field.value?.toString() ?? ""} onValueChange={v => field.onChange(v ? Number(v) : undefined)}>
                       <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
-                      <SelectContent>{(agents ?? []).map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}</SelectContent>
+                      <SelectContent>
+                        {(agents ?? []).filter(a => a.role === "agent" || a.role === "broker" || a.role === "manager").map(a => (
+                          <SelectItem key={a.id} value={String(a.id)}>
+                            {a.name} <span className="text-muted-foreground">({a.role})</span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
                     </Select><FormMessage />
                   </FormItem>
                 )} />
@@ -438,11 +444,12 @@ export default function LeadsPage() {
   const { toast } = useToast();
   const { profile, role } = useRole();
   const { user: authUser } = useAuth();
-  const isSales = role === "agent";
+  const isSales = role === "agent" || role === "broker";
   const canAssign = role === "owner" || role === "manager";
   const [, setLocation] = useLocation();
 
-  const { data: leads, isLoading } = useGetLeads({}, { query: { queryKey: getGetLeadsQueryKey({}) } });
+  // Poll every 30s so owner/manager see leads added by agents without manual refresh
+  const { data: leads, isLoading } = useGetLeads({}, { query: { queryKey: getGetLeadsQueryKey({}), refetchInterval: 30_000 } });
   const { data: agents } = useGetAgents();
 
   const createLead = useCreateLead({
@@ -944,13 +951,36 @@ export default function LeadsPage() {
                     </Select><FormMessage />
                   </FormItem>
                 )} />
-                {!isSales && (
+                {isSales ? (
+                  <div className="col-span-2">
+                    <p className="text-xs font-medium text-muted-foreground mb-1.5">Assigned To</p>
+                    <div className="flex items-center gap-3 bg-primary/5 border border-primary/20 rounded-lg px-3 py-2.5">
+                      <div className="w-7 h-7 rounded-full bg-primary/15 text-primary flex items-center justify-center text-xs font-bold flex-shrink-0">
+                        {profile.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-foreground">{profile.name}</p>
+                        <p className="text-[10px] text-primary capitalize">{role} · This lead will be assigned to you</p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
                   <FormField control={form.control} name="assignedTo" render={({ field }) => (
-                    <FormItem className="col-span-2"><FormLabel>Assign to Agent</FormLabel>
+                    <FormItem className="col-span-2">
+                      <FormLabel>Assign to Agent</FormLabel>
                       <Select value={field.value?.toString() ?? ""} onValueChange={v => field.onChange(v ? Number(v) : undefined)}>
-                        <SelectTrigger data-testid="select-lead-agent"><SelectValue placeholder="Unassigned" /></SelectTrigger>
-                        <SelectContent>{(agents ?? []).map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}</SelectContent>
-                      </Select><FormMessage />
+                        <SelectTrigger data-testid="select-lead-agent">
+                          <SelectValue placeholder="Leave unassigned" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(agents ?? []).filter(a => a.role === "agent" || a.role === "broker" || a.role === "manager").map(a => (
+                            <SelectItem key={a.id} value={String(a.id)}>
+                              {a.name} <span className="text-muted-foreground">({a.role})</span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
                     </FormItem>
                   )} />
                 )}

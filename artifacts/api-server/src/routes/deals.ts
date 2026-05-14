@@ -82,12 +82,12 @@ router.post("/deals", async (req, res): Promise<void> => {
     closingDate: parsed.data.closingDate ? new Date(parsed.data.closingDate as unknown as string) : null,
   }).returning();
 
-  await db.insert(activityTable).values({
+  db.insert(activityTable).values({
     type: "deal_updated",
     description: `New deal created`,
     entityName: deal.title,
     agentId: deal.agentId ?? undefined,
-  });
+  }).catch(() => {});
 
   res.status(201).json(await formatDeal(deal));
 });
@@ -131,12 +131,12 @@ router.put("/deals/:id", async (req, res): Promise<void> => {
   const [deal] = await db.update(dealsTable).set(updateData).where(eq(dealsTable.id, params.data.id)).returning();
   if (!deal) { res.status(404).json({ error: "Deal not found" }); return; }
 
-  await db.insert(activityTable).values({
+  db.insert(activityTable).values({
     type: deal.stage === "closed_won" ? "deal_closed" : "deal_updated",
     description: deal.stage === "closed_won" ? `Deal closed successfully` : `Deal moved to ${deal.stage.replace(/_/g, " ")}`,
     entityName: deal.title,
     agentId: deal.agentId ?? undefined,
-  });
+  }).catch(() => {});
 
   res.json(await formatDeal(deal));
 });
@@ -150,7 +150,7 @@ router.delete("/deals/:id", ownerMiddleware as any, async (req, res): Promise<vo
   if (!deal) { res.status(404).json({ error: "Deal not found" }); return; }
 
   await db.delete(dealsTable).where(eq(dealsTable.id, id));
-  await db.insert(activityTable).values({ type: "deal_deleted", description: `Deal deleted`, entityName: deal.title, agentId: deal.agentId ?? undefined });
+  db.insert(activityTable).values({ type: "deal_deleted", description: `Deal deleted`, entityName: deal.title, agentId: deal.agentId ?? undefined }).catch(() => {});
   res.sendStatus(204);
 });
 
