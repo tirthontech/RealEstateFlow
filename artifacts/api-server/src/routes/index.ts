@@ -19,8 +19,8 @@ const router: IRouter = Router();
 router.use(healthRouter);
 router.use(authRouter);
 
-// Admin routes (auth + isAdmin enforced inside adminRouter)
-router.use(adminRouter);
+// Admin routes (auth + isAdmin enforced inside adminRouter) — scoped to /admin/*
+router.use("/admin", adminRouter);
 
 // Protected routes — require valid JWT
 router.use(authMiddleware as any);

@@ -21,12 +21,12 @@ const PUBLIC_FIELDS = {
   createdAt: usersTable.createdAt,
 };
 
-router.get("/admin/users", async (_req, res): Promise<void> => {
+router.get("/users", async (_req, res): Promise<void> => {
   const users = await db.select(PUBLIC_FIELDS).from(usersTable).orderBy(usersTable.createdAt);
   res.json(users);
 });
 
-router.post("/admin/users", async (req, res): Promise<void> => {
+router.post("/users", async (req, res): Promise<void> => {
   const { username, password, name, role, isAdmin, email } = req.body ?? {};
   if (!username || !password || !name || !role) {
     res.status(400).json({ error: "username, password, name and role are required" });
@@ -76,7 +76,7 @@ router.post("/admin/users", async (req, res): Promise<void> => {
   }
 });
 
-router.put("/admin/users/:id", async (req, res): Promise<void> => {
+router.put("/users/:id", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
@@ -127,7 +127,7 @@ router.put("/admin/users/:id", async (req, res): Promise<void> => {
   }
 });
 
-router.delete("/admin/users/:id", async (req, res): Promise<void> => {
+router.delete("/users/:id", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 

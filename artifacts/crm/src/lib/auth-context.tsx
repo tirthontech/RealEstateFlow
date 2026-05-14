@@ -3,8 +3,8 @@ import {
 } from "react";
 import { setBaseUrl, setAuthTokenGetter } from "@workspace/api-client-react";
 
-// Point the generated API client at the right base URL
-setBaseUrl("/api");
+// No base URL needed — generated URLs already include /api prefix
+setBaseUrl("");
 
 export interface AuthUser {
   id: number;
