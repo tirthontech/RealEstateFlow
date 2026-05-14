@@ -5,6 +5,8 @@ import { ownerMiddleware } from "../middlewares/auth";
 
 const router: IRouter = Router();
 
+const FIELD_ROLES = ["agent", "broker"];
+
 type CreateViewingBody = {
   leadId?: number | null;
   propertyId?: number | null;
@@ -53,10 +55,17 @@ async function formatViewing(v: typeof viewingsTable.$inferSelect) {
 
 router.get("/viewings", async (req, res): Promise<void> => {
   const { status, leadId, agentId } = req.query;
+  const user = req.user!;
   const conditions: SQL[] = [];
+
   if (status && typeof status === "string") conditions.push(eq(viewingsTable.status, status));
   if (leadId) conditions.push(eq(viewingsTable.leadId, Number(leadId)));
   if (agentId) conditions.push(eq(viewingsTable.agentId, Number(agentId)));
+
+  // Field agents see only their own viewings
+  if (FIELD_ROLES.includes(user.role) && user.agentId) {
+    conditions.push(eq(viewingsTable.agentId, user.agentId));
+  }
 
   const rows = conditions.length > 0
     ? await db.select().from(viewingsTable).where(and(...conditions)).orderBy(viewingsTable.date)
@@ -68,14 +77,19 @@ router.get("/viewings", async (req, res): Promise<void> => {
 
 router.post("/viewings", async (req, res): Promise<void> => {
   const body = req.body as CreateViewingBody;
-  if (!body.date) {
-    res.status(400).json({ error: "date is required" });
-    return;
+  if (!body.date) { res.status(400).json({ error: "date is required" }); return; }
+  const user = req.user!;
+
+  // Auto-assign to self for field roles
+  let agentId = body.agentId ?? null;
+  if (FIELD_ROLES.includes(user.role) && user.agentId) {
+    agentId = user.agentId;
   }
+
   const [viewing] = await db.insert(viewingsTable).values({
     leadId: body.leadId ?? null,
     propertyId: body.propertyId ?? null,
-    agentId: body.agentId ?? null,
+    agentId,
     date: body.date,
     time: body.time ?? "10:00",
     status: body.status ?? "pending",
@@ -87,23 +101,40 @@ router.post("/viewings", async (req, res): Promise<void> => {
 router.get("/viewings/:id", async (req, res): Promise<void> => {
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
   const [viewing] = await db.select().from(viewingsTable).where(eq(viewingsTable.id, id));
   if (!viewing) { res.status(404).json({ error: "Viewing not found" }); return; }
+
+  const user = req.user!;
+  if (FIELD_ROLES.includes(user.role) && user.agentId && viewing.agentId !== user.agentId) {
+    res.status(403).json({ error: "Access denied" }); return;
+  }
+
   res.json(await formatViewing(viewing));
 });
 
 router.put("/viewings/:id", async (req, res): Promise<void> => {
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const [existing] = await db.select().from(viewingsTable).where(eq(viewingsTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Viewing not found" }); return; }
+
+  const user = req.user!;
+  if (FIELD_ROLES.includes(user.role) && user.agentId && existing.agentId !== user.agentId) {
+    res.status(403).json({ error: "Access denied" }); return;
+  }
+
   const body = req.body as UpdateViewingBody;
   const updateData: Record<string, unknown> = {};
   if (body.leadId !== undefined) updateData.leadId = body.leadId;
   if (body.propertyId !== undefined) updateData.propertyId = body.propertyId;
-  if (body.agentId !== undefined) updateData.agentId = body.agentId;
+  if (body.agentId !== undefined && !FIELD_ROLES.includes(user.role)) updateData.agentId = body.agentId; // only owner/manager can reassign
   if (body.date !== undefined) updateData.date = body.date;
   if (body.time !== undefined) updateData.time = body.time;
   if (body.status !== undefined) updateData.status = body.status;
   if (body.notes !== undefined) updateData.notes = body.notes;
+
   const [viewing] = await db.update(viewingsTable).set(updateData).where(eq(viewingsTable.id, id)).returning();
   if (!viewing) { res.status(404).json({ error: "Viewing not found" }); return; }
   res.json(await formatViewing(viewing));
@@ -112,14 +143,15 @@ router.put("/viewings/:id", async (req, res): Promise<void> => {
 router.delete("/viewings/:id", ownerMiddleware as any, async (req, res): Promise<void> => {
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
   const [viewing] = await db.select().from(viewingsTable).where(eq(viewingsTable.id, id));
   if (!viewing) { res.status(404).json({ error: "Viewing not found" }); return; }
+
   await db.delete(viewingsTable).where(eq(viewingsTable.id, id));
-  const entityName = `Viewing #${id}`;
   await db.insert(activityTable).values({
     type: "viewing_deleted",
     description: `Viewing deleted`,
-    entityName,
+    entityName: `Viewing #${id}`,
     agentId: viewing.agentId ?? undefined,
   });
   res.sendStatus(204);

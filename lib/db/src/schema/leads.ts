@@ -14,6 +14,7 @@ export const leadsTable = pgTable("leads", {
   propertyType: text("property_type"),
   notes: text("notes"),
   assignedTo: integer("assigned_to"),
+  createdBy: integer("created_by"),  // user id of whoever added this lead
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

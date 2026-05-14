@@ -5,7 +5,7 @@ export const usersTable = pgTable("users", {
   username: text("username").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   name: text("name").notNull(),
-  role: text("role").notNull().default("sales"),  // owner|cfo|manager|sales|broker
+  role: text("role").notNull().default("agent"),  // owner | cfo | manager | agent | broker
   isAdmin: boolean("is_admin").notNull().default(false),
   agentId: integer("agent_id"),                   // links salesperson/broker to agents table
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

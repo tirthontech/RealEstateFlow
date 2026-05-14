@@ -1,8 +1,14 @@
 import { Router } from "express";
 import { eq, and } from "drizzle-orm";
 import { db, unitsTable, leadsTable } from "@workspace/db";
+import { ownerMiddleware } from "../middlewares/auth";
 
 const router = Router();
+
+function ownerOrManager(req: any, res: any, next: any) {
+  if (req.user?.role === "owner" || req.user?.role === "manager") return next();
+  res.status(403).json({ error: "Owner or manager access required" });
+}
 
 function fmt(u: typeof unitsTable.$inferSelect, leadName?: string | null) {
   return {
@@ -36,8 +42,8 @@ router.get("/units", async (req, res): Promise<void> => {
   res.json(rows.map(r => fmt(r, leadMap.get(r.blockedByLeadId ?? -1))));
 });
 
-// POST /units
-router.post("/units", async (req, res): Promise<void> => {
+// POST /units — owner or manager only
+router.post("/units", ownerOrManager, async (req, res): Promise<void> => {
   const { propertyId, unitNo, bhkType, floor, facing, carpetArea, saleableArea, bsp, plcCharges, parkingCharges, isPremium, notes } = req.body ?? {};
   if (!propertyId || !unitNo || !bhkType) {
     res.status(400).json({ error: "propertyId, unitNo, bhkType required" }); return;
@@ -95,8 +101,8 @@ router.put("/units/:id", async (req, res): Promise<void> => {
   res.json(fmt(unit, leadName));
 });
 
-// DELETE /units/:id
-router.delete("/units/:id", async (req, res): Promise<void> => {
+// DELETE /units/:id — owner only
+router.delete("/units/:id", ownerMiddleware as any, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   const [deleted] = await db.delete(unitsTable).where(eq(unitsTable.id, id)).returning();
   if (!deleted) { res.status(404).json({ error: "Unit not found" }); return; }
