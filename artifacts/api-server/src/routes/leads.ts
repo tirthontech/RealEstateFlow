@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, ilike, and, type SQL } from "drizzle-orm";
 import { db, leadsTable, agentsTable, activityTable, notificationsTable, usersTable, viewingsTable, dealsTable, scheduledActivitiesTable } from "@workspace/db";
 import { ownerMiddleware } from "../middlewares/auth";
+import { logger } from "../lib/logger";
 import {
   CreateLeadBody,
   UpdateLeadBody,
@@ -72,19 +73,26 @@ router.post("/leads", async (req, res): Promise<void> => {
   const { name, phone, source, propertyType, notes } = parsed.data;
   const email = parsed.data.email ?? "";
 
-  const [lead] = await db.insert(leadsTable).values({
-    name,
-    email,
-    phone: phone ?? null,
-    source,
-    propertyType: propertyType ?? null,
-    notes: notes ?? null,
-    assignedTo,
-    createdBy: user.id,
-    budget: parsed.data.budget != null ? String(parsed.data.budget) : null,
-    status: resolvedStatus,
-    score: parsed.data.score ?? 50,
-  }).returning();
+  let lead: typeof leadsTable.$inferSelect;
+  try {
+    const rows = await db.insert(leadsTable).values({
+      name,
+      email,
+      phone: phone ?? null,
+      source,
+      propertyType: propertyType ?? null,
+      notes: notes ?? null,
+      assignedTo,
+      budget: parsed.data.budget != null ? String(parsed.data.budget) : null,
+      status: resolvedStatus,
+      score: parsed.data.score ?? 50,
+    }).returning();
+    lead = rows[0];
+  } catch (err: any) {
+    logger.error({ err, body: req.body }, "Failed to insert lead");
+    res.status(500).json({ error: err?.message ?? "Database error — check server logs" });
+    return;
+  }
 
   let agentName: string | null = null;
   if (lead.assignedTo) {

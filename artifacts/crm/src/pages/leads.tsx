@@ -462,7 +462,7 @@ export default function LeadsPage() {
         toast({ title: "Lead created ✓" });
         form.reset();
       },
-      onError: () => toast({ title: "Error creating lead", variant: "destructive" }),
+      onError: (err: any) => toast({ title: "Error creating lead", description: err?.message ?? String(err), variant: "destructive" }),
     },
   });
 
