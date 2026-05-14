@@ -19,15 +19,17 @@ async function enrichAgents(agents: (typeof agentsTable.$inferSelect)[]) {
     .groupBy(leadsTable.assignedTo);
   const leadCount = new Map(leadRows.map(r => [r.agentId, r.count]));
 
-  const dealRows = await db
-    .select({
-      agentId: dealsTable.agentId,
-      count: sql<number>`count(*)::int`,
-      revenue: sql<number>`coalesce(sum(value::numeric), 0)`,
-    })
+  const dealCountRows = await db
+    .select({ agentId: dealsTable.agentId, count: sql<number>`count(*)::int` })
     .from(dealsTable)
     .groupBy(dealsTable.agentId);
-  const dealMap = new Map(dealRows.map(r => [r.agentId, r]));
+  const revenueRows = await db
+    .select({ agentId: dealsTable.agentId, revenue: sql<number>`coalesce(sum(value::numeric), 0)` })
+    .from(dealsTable)
+    .where(eq(dealsTable.stage, "closed_won"))
+    .groupBy(dealsTable.agentId);
+  const dealCountMap = new Map(dealCountRows.map(r => [r.agentId, r.count]));
+  const revenueMap = new Map(revenueRows.map(r => [r.agentId, r.revenue]));
 
   const actRows = await db
     .select({ agentId: scheduledActivitiesTable.agentId, count: sql<number>`count(*)::int` })
@@ -48,8 +50,8 @@ async function enrichAgents(agents: (typeof agentsTable.$inferSelect)[]) {
     return {
       ...agent,
       activeLeads:     leadCount.get(agent.id) ?? 0,
-      dealsCount:      dealMap.get(agent.id)?.count ?? 0,
-      revenue:         Number(dealMap.get(agent.id)?.revenue ?? 0),
+      dealsCount:      dealCountMap.get(agent.id) ?? 0,
+      revenue:         Number(revenueMap.get(agent.id) ?? 0),
       activitiesCount: actCount.get(agent.id) ?? 0,
       userId:          linkedUser?.id ?? null,
       username:        linkedUser?.username ?? null,

@@ -46,15 +46,15 @@ const SOURCE_COLORS: Record<string, string> = {
 
 const PROJECTS = ["Prestige Lakeside", "Godrej Summit", "DLF Cybercity", "Sobha Royal Crest"];
 
-/* Tab config — maps to lead statuses */
+/* Tab config — null statuses means "show all" */
 const LEAD_TABS = [
-  { id: "all",         label: "New Leads",   statuses: ["new"],                            color: "text-blue-600" },
-  { id: "upcoming",    label: "Upcoming",    statuses: ["contacted", "qualified"],          color: "text-purple-600" },
-  { id: "site_visits", label: "Site Visits", statuses: ["proposal"],                        color: "text-teal-600" },
-  { id: "expected",    label: "Expected",    statuses: ["negotiation"],                     color: "text-amber-600" },
-  { id: "reengage",    label: "Re-Engage",   statuses: ["closed_lost"],                     color: "text-red-600" },
-  { id: "closed",      label: "Closed Won",  statuses: ["closed_won"],                      color: "text-green-600" },
-] as const;
+  { id: "all",         label: "All",         statuses: null as string[] | null,             color: "text-slate-600" },
+  { id: "follow_up",   label: "Follow Ups",  statuses: ["contacted", "qualified"] as string[], color: "text-purple-600" },
+  { id: "site_visits", label: "Site Visits", statuses: ["proposal"] as string[],            color: "text-teal-600" },
+  { id: "negotiation", label: "Negotiation", statuses: ["negotiation"] as string[],         color: "text-amber-600" },
+  { id: "won",         label: "Won",         statuses: ["closed_won"] as string[],          color: "text-green-600" },
+  { id: "lost",        label: "Lost",        statuses: ["closed_lost"] as string[],         color: "text-red-600" },
+];
 
 /* Quick filters */
 const QUICK_FILTERS = [
@@ -215,6 +215,57 @@ function LeadAvatar({ name, score }: { name: string; score: number }) {
   return (
     <div className={cn("w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ring-2 flex-shrink-0", bg)}>
       {initials}
+    </div>
+  );
+}
+
+/* ─── Lead Status Inline Toggle ──────────────────────────────────── */
+const LEAD_STATUS_OPTIONS = LEAD_STATUSES.filter(s => s !== "unassigned").map(s => ({
+  value: s, label: stageLabel(s),
+}));
+
+function statusDot(status: string) {
+  const map: Record<string, string> = {
+    new: "bg-blue-500", contacted: "bg-purple-500", qualified: "bg-indigo-500",
+    proposal: "bg-teal-500", negotiation: "bg-amber-500",
+    closed_won: "bg-green-500", closed_lost: "bg-red-400",
+  };
+  return map[status] ?? "bg-slate-400";
+}
+
+function LeadStatusToggle({ lead, onUpdate }: { lead: Lead; onUpdate: (id: number, status: string) => void }) {
+  const [open, setOpen] = useState(false);
+  if (lead.status === "unassigned") {
+    return (
+      <span className={cn("inline-flex px-2 py-0.5 rounded text-[10px] font-medium whitespace-nowrap", statusColor(lead.status))}>
+        {stageLabel(lead.status)}
+      </span>
+    );
+  }
+  return (
+    <div className="relative">
+      <button
+        onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
+        className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium whitespace-nowrap hover:opacity-80 transition-opacity", statusColor(lead.status))}>
+        {stageLabel(lead.status)}
+        <ChevronRight className="w-2.5 h-2.5 rotate-90 -mr-0.5" />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={e => { e.stopPropagation(); setOpen(false); }} />
+          <div className="absolute right-0 z-50 mt-1 bg-card border border-border rounded-lg shadow-xl overflow-hidden min-w-[140px]">
+            {LEAD_STATUS_OPTIONS.map(opt => (
+              <button key={opt.value}
+                onClick={e => { e.stopPropagation(); onUpdate(lead.id, opt.value); setOpen(false); }}
+                className={cn("w-full flex items-center gap-2 px-3 py-2 text-[11px] font-medium hover:bg-muted/50 transition-colors text-left",
+                  lead.status === opt.value && "bg-muted/40")}>
+                <span className={cn("w-2 h-2 rounded-full flex-shrink-0", statusDot(opt.value))} />
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -502,6 +553,19 @@ export default function LeadsPage() {
     },
   });
 
+  const statusChangeMutation = useUpdateLead({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getGetLeadsQueryKey() });
+      },
+      onError: () => toast({ title: "Failed to update status", variant: "destructive" }),
+    },
+  });
+
+  function handleStatusChange(leadId: number, status: string) {
+    statusChangeMutation.mutate({ id: leadId, data: { status } });
+  }
+
   function handleAssign(leadId: number, agentId: number) {
     assignLeadMutation.mutate({ id: leadId, data: { assignedTo: agentId } });
   }
@@ -534,9 +598,10 @@ export default function LeadsPage() {
   const tabCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     LEAD_TABS.forEach(tab => {
-      counts[tab.id] = allLeads.filter(l => (tab.statuses as readonly string[]).includes(l.status)).length;
+      counts[tab.id] = tab.statuses === null
+        ? allLeads.length
+        : allLeads.filter(l => tab.statuses!.includes(l.status)).length;
     });
-    counts.all = allLeads.filter(l => l.status === "new").length;
     counts.unassigned = (leads ?? []).filter(l => l.status === "unassigned").length;
     return counts;
   }, [allLeads, leads]);
@@ -551,8 +616,8 @@ export default function LeadsPage() {
       return (leads ?? []).filter(l => l.status === "unassigned");
     }
     const tab = LEAD_TABS.find(t => t.id === activeTab);
-    if (!tab) return allLeads;
-    return allLeads.filter(l => (tab.statuses as readonly string[]).includes(l.status));
+    if (!tab || tab.statuses === null) return allLeads;
+    return allLeads.filter(l => tab.statuses!.includes(l.status));
   }, [allLeads, leads, activeTab]);
 
   const displayed = useMemo(() => {
@@ -669,8 +734,8 @@ export default function LeadsPage() {
                 </span>
               )}
               {tab.id === "all" && overdueCount > 0 && (
-                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 flex items-center gap-0.5">
-                  <AlertTriangle className="w-2.5 h-2.5" />{overdueCount} overdue
+                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 flex items-center gap-0.5 ml-0.5">
+                  <AlertTriangle className="w-2.5 h-2.5" />{overdueCount}
                 </span>
               )}
             </button>
@@ -815,10 +880,8 @@ export default function LeadsPage() {
                     </td>
 
                     {/* Status */}
-                    <td className="px-4 py-3">
-                      <span className={cn("inline-flex px-2 py-0.5 rounded text-[10px] font-medium whitespace-nowrap", statusColor(lead.status))}>
-                        {stageLabel(lead.status)}
-                      </span>
+                    <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                      <LeadStatusToggle lead={lead} onUpdate={handleStatusChange} />
                     </td>
 
                     {/* Actions */}

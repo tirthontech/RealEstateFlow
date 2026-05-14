@@ -223,7 +223,7 @@ export default function DealsPage() {
   const isSales = role === "agent" || role === "broker";
   const isOwner = role === "owner";
 
-  const { data: allDeals, isLoading } = useGetDeals({}, { query: { queryKey: getGetDealsQueryKey() } });
+  const { data: allDeals, isLoading } = useGetDeals({}, { query: { queryKey: getGetDealsQueryKey(), refetchInterval: 30_000 } });
   const { data: leads } = useGetLeads({}, { query: { queryKey: ["leads"] } });
   const { data: properties } = useGetProperties({}, { query: { queryKey: ["properties"] } });
   const { data: agents } = useGetAgents();
