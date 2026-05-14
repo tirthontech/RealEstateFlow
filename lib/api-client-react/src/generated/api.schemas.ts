@@ -148,7 +148,7 @@ export interface UpdateDealBody {
 export interface Agent {
   id: number;
   name: string;
-  email: string;
+  email?: string | null;
   phone?: string | null;
   /** admin, manager, agent, support */
   role: string;
@@ -157,6 +157,10 @@ export interface Agent {
   activeLeads: number;
   dealsCount: number;
   revenue: number;
+  activitiesCount: number;
+  userId?: number | null;
+  username?: string | null;
+  hasLogin: boolean;
   createdAt: string;
 }
 

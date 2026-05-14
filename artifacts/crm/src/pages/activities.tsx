@@ -3,7 +3,7 @@ import { useGetLeads, useGetAgents, useGetProperties, getGetLeadsQueryKey, getGe
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Phone, Home, TrendingUp, CheckCircle2, Clock, Search, Plus, Download,
-  Calendar, MessageSquare, ChevronRight, X, ArrowUpDown, MessageCircle, Loader2, Trash2,
+  Calendar, MessageSquare, ChevronRight, X, ArrowUpDown, MessageCircle, Loader2, Trash2, Pencil,
 } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { useRole } from "@/lib/role-context";
@@ -353,6 +353,127 @@ function SkeletonRow() {
   );
 }
 
+/* ─── Edit Activity Dialog ───────────────────────────────────────────── */
+function EditActivityDialog({ activity, onSave, onClose, isPending }: {
+  activity: Activity;
+  onSave: (data: UpdateActivityInput) => void;
+  onClose: () => void;
+  isPending: boolean;
+}) {
+  const { data: properties } = useGetProperties({}, { query: { queryKey: getGetPropertiesQueryKey({}) } });
+  const propertyTitles = (properties ?? []).map(p => p.title);
+
+  const [form, setForm] = useState({
+    customer: activity.customer,
+    phone: activity.phone,
+    activityType: activity.activityType as ActivityType,
+    source: activity.source,
+    project: activity.project,
+    activityDate: activity.activityDate,
+    activityTime: activity.activityTime,
+    lastRemark: activity.lastRemark,
+    status: activity.status as ActivityStatus,
+    budget: activity.budget?.toString() ?? "",
+  });
+
+  const inp = "w-full text-sm border border-border rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/30";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+      <div className="bg-card rounded-xl border border-border shadow-xl w-full max-w-md p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-foreground flex items-center gap-2"><Pencil className="w-4 h-4 text-primary" />Edit Activity</h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="col-span-2">
+            <label className="text-xs font-medium text-muted-foreground block mb-1">Customer Name</label>
+            <input value={form.customer} onChange={e => setForm(p => ({ ...p, customer: e.target.value }))} placeholder="Customer name" className={inp} />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground block mb-1">Phone</label>
+            <input value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} placeholder="+91 xxxxx xxxxx" className={inp} />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground block mb-1">Status</label>
+            <select value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value as ActivityStatus }))} className={inp}>
+              {STATUS_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </select>
+          </div>
+          <div className="col-span-2">
+            <label className="text-xs font-medium text-muted-foreground block mb-1">Activity Type</label>
+            <div className="grid grid-cols-2 gap-1.5">
+              {ACTIVITY_TYPES.filter(t => t.id !== "sale_done").map(t => (
+                <button key={t.id} type="button" onClick={() => setForm(p => ({ ...p, activityType: t.id }))}
+                  className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all",
+                    form.activityType === t.id ? t.color + " ring-2 ring-offset-1 ring-primary/40" : "border-border text-muted-foreground hover:border-primary/40")}>
+                  <t.icon className="w-3 h-3" />{t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground block mb-1">Source</label>
+            <select value={form.source} onChange={e => setForm(p => ({ ...p, source: e.target.value }))} className={inp}>
+              {SOURCE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground block mb-1">Project</label>
+            <select value={form.project} onChange={e => setForm(p => ({ ...p, project: e.target.value }))} className={inp}>
+              {(propertyTitles.length > 0 ? propertyTitles : PROJECT_OPTIONS).map(p => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground block mb-1">Activity Date</label>
+            <input type="date" value={form.activityDate} onChange={e => setForm(p => ({ ...p, activityDate: e.target.value }))} className={inp} />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground block mb-1">Activity Time</label>
+            <input type="time" value={form.activityTime.replace(" AM","").replace(" PM","")} onChange={e => {
+              const [h, m] = e.target.value.split(":"); const hr = Number(h);
+              setForm(p => ({ ...p, activityTime: `${hr > 12 ? hr - 12 : hr || 12}:${m} ${hr >= 12 ? "PM" : "AM"}` }));
+            }} className={inp} />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground block mb-1">Budget (₹)</label>
+            <input type="number" value={form.budget} onChange={e => setForm(p => ({ ...p, budget: e.target.value }))} placeholder="e.g. 8500000" className={inp} />
+          </div>
+          <div className="col-span-2">
+            <label className="text-xs font-medium text-muted-foreground block mb-1">Remark / Note</label>
+            <textarea value={form.lastRemark} onChange={e => setForm(p => ({ ...p, lastRemark: e.target.value }))} rows={2}
+              placeholder="Add a note..."
+              className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none" />
+          </div>
+        </div>
+
+        <div className="flex gap-2 pt-1">
+          <button disabled={!form.customer || isPending} onClick={() => onSave({
+            customer: form.customer,
+            phone: form.phone || null,
+            activityType: form.activityType,
+            source: form.source || null,
+            project: form.project || null,
+            activityDate: form.activityDate,
+            activityTime: form.activityTime || null,
+            lastRemark: form.lastRemark || null,
+            status: form.status,
+            budget: form.budget ? Number(form.budget) : null,
+          })}
+            className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2">
+            {isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+            Save Changes
+          </button>
+          <button onClick={onClose} disabled={isPending} className="flex-1 py-2 border border-border rounded-lg text-sm font-medium hover:bg-muted/50 transition-colors">Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Main Page ──────────────────────────────────────────────────────── */
 export default function ActivitiesPage() {
   const { profile, role } = useRole();
@@ -368,6 +489,7 @@ export default function ActivitiesPage() {
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [editActivity, setEditActivity] = useState<Activity | null>(null);
   const [sortAsc, setSortAsc] = useState(true);
   const [deleteActivityId, setDeleteActivityId] = useState<number | null>(null);
   const [deleteActivityCustomer, setDeleteActivityCustomer] = useState("");
@@ -447,6 +569,19 @@ export default function ActivitiesPage() {
   return (
     <div className="p-4 sm:p-6 space-y-4">
       <ScheduleDialog open={scheduleOpen} onClose={() => setScheduleOpen(false)} onSave={handleAddActivity} customers={customerNames} />
+      {editActivity && (
+        <EditActivityDialog
+          activity={editActivity}
+          onSave={(data) => {
+            update.mutate({ id: editActivity.id, ...data }, {
+              onSuccess: () => { setEditActivity(null); toast({ title: "Activity updated ✓" }); },
+              onError: () => toast({ title: "Failed to update activity", variant: "destructive" }),
+            });
+          }}
+          onClose={() => setEditActivity(null)}
+          isPending={update.isPending}
+        />
+      )}
       <ConfirmDeleteDialog
         open={deleteActivityId !== null}
         onOpenChange={(open) => { if (!open) setDeleteActivityId(null); }}
@@ -599,15 +734,24 @@ export default function ActivitiesPage() {
                       <StatusToggle activity={act} onUpdate={updateActivity} />
                     </td>
                     <td className="px-3 py-3">
-                      {(role === "owner" || isSales) && (
+                      <div className="flex items-center gap-1">
                         <button
-                          onClick={() => { setDeleteActivityCustomer(act.customer); setDeleteActivityId(act.id); }}
-                          className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                          title="Delete activity"
+                          onClick={() => setEditActivity(act)}
+                          className="p-1 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
+                          title="Edit activity"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Pencil className="w-3.5 h-3.5" />
                         </button>
-                      )}
+                        {(role === "owner" || isSales) && (
+                          <button
+                            onClick={() => { setDeleteActivityCustomer(act.customer); setDeleteActivityId(act.id); }}
+                            className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                            title="Delete activity"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );

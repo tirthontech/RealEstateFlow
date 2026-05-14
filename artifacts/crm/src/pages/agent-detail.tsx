@@ -47,7 +47,7 @@ export default function AgentDetailPage() {
 
   useEffect(() => {
     if (agent) {
-      form.reset({ name: agent.name, email: agent.email, phone: agent.phone ?? "", role: agent.role, market: agent.market ?? "" });
+      form.reset({ name: agent.name, email: agent.email ?? "", phone: agent.phone ?? "", role: agent.role, market: agent.market ?? "" });
     }
   }, [agent, form]);
 

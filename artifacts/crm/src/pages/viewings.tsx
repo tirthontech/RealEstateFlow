@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useGetLeads, useGetProperties, useGetAgents, getGetLeadsQueryKey, getGetPropertiesQueryKey } from "@workspace/api-client-react";
 import { customFetch } from "@workspace/api-client-react";
 import { viewingKeys } from "@/lib/queryKeys";
-import { Calendar, Clock, MapPin, User, Plus, CheckCircle2, XCircle, HelpCircle, Trash2, Phone } from "lucide-react";
+import { Calendar, Clock, MapPin, User, Plus, CheckCircle2, XCircle, HelpCircle, Trash2, Phone, Pencil, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -75,10 +75,12 @@ export default function ViewingsPage() {
   const { toast } = useToast();
   const { role } = useRole();
   const isOwner = role === "owner";
+  const canEdit = role === "owner" || role === "manager";
   const [showAdd, setShowAdd] = useState(false);
   const [filterStatus, setFilterStatus] = useState<Status | "all">("all");
   const [newViewing, setNewViewing] = useState({ leadId: "", propertyId: "", agentId: "", date: "", time: "10:00", notes: "" });
   const [deleteViewingId, setDeleteViewingId] = useState<number | null>(null);
+  const [editViewing, setEditViewing] = useState<ViewingRecord | null>(null);
 
   const { data: viewings = [], isLoading } = useViewings();
   const { data: leads } = useGetLeads({}, { query: { queryKey: getGetLeadsQueryKey() } });
@@ -305,6 +307,12 @@ export default function ViewingsPage() {
                         </Button>
                       </>
                     )}
+                    {canEdit && (
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-primary"
+                        onClick={() => setEditViewing(v)}>
+                        <Pencil className="w-3.5 h-3.5" />
+                      </Button>
+                    )}
                     {isOwner && (
                       <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
                         onClick={() => setDeleteViewingId(v.id)}>
@@ -318,6 +326,118 @@ export default function ViewingsPage() {
           })}
         </div>
       )}
+
+      {/* Edit Viewing Modal */}
+      {editViewing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-md p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-foreground flex items-center gap-2">
+                <Pencil className="w-4 h-4 text-primary" />Edit Viewing
+              </h3>
+              <button onClick={() => setEditViewing(null)} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+            </div>
+            <EditViewingForm
+              viewing={editViewing}
+              leads={leads}
+              properties={properties}
+              agents={agents}
+              onSave={(data) => {
+                updateViewing.mutate({ id: editViewing.id, data }, {
+                  onSuccess: () => { setEditViewing(null); toast({ title: "Viewing updated ✓" }); },
+                  onError: () => toast({ title: "Failed to update viewing", variant: "destructive" }),
+                });
+              }}
+              onClose={() => setEditViewing(null)}
+              isPending={updateViewing.isPending}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EditViewingForm({ viewing, leads, properties, agents, onSave, onClose, isPending }: {
+  viewing: ViewingRecord;
+  leads: { id: number; name: string }[] | undefined;
+  properties: { id: number; title: string }[] | undefined;
+  agents: { id: number; name: string }[] | undefined;
+  onSave: (data: Partial<ViewingRecord>) => void;
+  onClose: () => void;
+  isPending: boolean;
+}) {
+  const [form, setForm] = useState({
+    leadId: viewing.leadId?.toString() ?? "",
+    propertyId: viewing.propertyId?.toString() ?? "",
+    agentId: viewing.agentId?.toString() ?? "",
+    date: viewing.date,
+    time: viewing.time,
+    status: viewing.status,
+    notes: viewing.notes ?? "",
+  });
+
+  const inp = "w-full h-9 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30";
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="col-span-2">
+          <label className="text-xs font-medium text-muted-foreground block mb-1">Lead</label>
+          <select value={form.leadId} onChange={e => setForm(p => ({ ...p, leadId: e.target.value }))} className={inp}>
+            <option value="">— None —</option>
+            {(leads ?? []).map(l => <option key={l.id} value={String(l.id)}>{l.name}</option>)}
+          </select>
+        </div>
+        <div className="col-span-2">
+          <label className="text-xs font-medium text-muted-foreground block mb-1">Property</label>
+          <select value={form.propertyId} onChange={e => setForm(p => ({ ...p, propertyId: e.target.value }))} className={inp}>
+            <option value="">— None —</option>
+            {(properties ?? []).map(p => <option key={p.id} value={String(p.id)}>{p.title}</option>)}
+          </select>
+        </div>
+        <div className="col-span-2">
+          <label className="text-xs font-medium text-muted-foreground block mb-1">Agent</label>
+          <select value={form.agentId} onChange={e => setForm(p => ({ ...p, agentId: e.target.value }))} className={inp}>
+            <option value="">— Unassigned —</option>
+            {(agents ?? []).map(a => <option key={a.id} value={String(a.id)}>{a.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs font-medium text-muted-foreground block mb-1">Date</label>
+          <input type="date" value={form.date} onChange={e => setForm(p => ({ ...p, date: e.target.value }))} className={inp} />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-muted-foreground block mb-1">Time</label>
+          <input type="time" value={form.time} onChange={e => setForm(p => ({ ...p, time: e.target.value }))} className={inp} />
+        </div>
+        <div className="col-span-2">
+          <label className="text-xs font-medium text-muted-foreground block mb-1">Status</label>
+          <select value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value as Status }))} className={inp}>
+            {(["pending","confirmed","completed","no_show","cancelled"] as const).map(s => (
+              <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="col-span-2">
+          <label className="text-xs font-medium text-muted-foreground block mb-1">Notes</label>
+          <input value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} placeholder="Optional notes..." className={inp} />
+        </div>
+      </div>
+      <div className="flex gap-2 pt-1">
+        <Button className="flex-1" onClick={() => onSave({
+          leadId: form.leadId ? parseInt(form.leadId) : null,
+          propertyId: form.propertyId ? parseInt(form.propertyId) : null,
+          agentId: form.agentId ? parseInt(form.agentId) : null,
+          date: form.date,
+          time: form.time,
+          status: form.status as Status,
+          notes: form.notes || null,
+        })} disabled={isPending}>
+          {isPending ? "Saving..." : "Save Changes"}
+        </Button>
+        <Button variant="outline" className="flex-1" onClick={onClose}>Cancel</Button>
+      </div>
     </div>
   );
 }

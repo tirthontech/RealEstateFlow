@@ -14,7 +14,7 @@ import {
   Plus, Search, Trash2, Phone, MessageCircle, Users, Calendar,
   Clock, Home, TrendingUp, CheckCircle2, X, Download, Filter,
   RefreshCw, ChevronRight, Flame, Thermometer, Snowflake, AlertTriangle,
-  UserPlus,
+  UserPlus, Pencil,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +26,7 @@ import { statusColor, stageLabel, formatCurrency, formatDate, LEAD_STATUSES, LEA
 import { useRole } from "@/lib/role-context";
 import { useAuth } from "@/lib/auth-context";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
+import { useActivities } from "@/lib/use-activities";
 
 /* ─── Config ───────────────────────────────────────────────────────── */
 const SOURCE_COLORS: Record<string, string> = {
@@ -72,8 +73,8 @@ const ACT_TYPES = [
   { id: "sale",              label: "Sale",              color: "bg-green-100 text-green-700" },
 ];
 
-/* ─── Create Lead Schema ─────────────────────────────────────────── */
-const createLeadSchema = z.object({
+/* ─── Lead Schema (shared for create + edit) ─────────────────────── */
+const leadSchema = z.object({
   name:         z.string().min(1, "Name is required"),
   email:        z.string().email("Invalid email").optional().or(z.literal("")),
   phone:        z.string().optional(),
@@ -85,22 +86,38 @@ const createLeadSchema = z.object({
   notes:        z.string().optional(),
   assignedTo:   z.coerce.number().optional(),
 });
-type FormValues = z.infer<typeof createLeadSchema>;
+type FormValues = z.infer<typeof leadSchema>;
 
 /* ─── Schedule Activity Dialog ───────────────────────────────────── */
-function ScheduleActivityDialog({ leadName, open, onClose }: {
-  leadName: string; open: boolean; onClose: () => void;
+function ScheduleActivityDialog({ leadId, leadName, leadPhone, open, onClose }: {
+  leadId: number; leadName: string; leadPhone?: string | null; open: boolean; onClose: () => void;
 }) {
   const { profile } = useRole();
   const { toast } = useToast();
+  const activities = useActivities();
   const [form, setForm] = useState({
     activityType: "phone", project: PROJECTS[0], date: new Date().toISOString().slice(0, 10),
     time: "10:00", remark: "", employee: profile.name,
   });
 
   function save() {
-    toast({ title: `Activity scheduled for ${leadName}` });
-    onClose();
+    activities.create.mutate({
+      activityType: form.activityType,
+      customer: leadName,
+      phone: leadPhone ?? null,
+      employeeName: form.employee,
+      project: form.project,
+      leadId,
+      activityDate: form.date,
+      activityTime: form.time,
+      lastRemark: form.remark || null,
+    }, {
+      onSuccess: () => {
+        toast({ title: `Activity scheduled for ${leadName}` });
+        onClose();
+      },
+      onError: () => toast({ title: "Failed to schedule activity", variant: "destructive" }),
+    });
   }
 
   if (!open) return null;
@@ -163,8 +180,9 @@ function ScheduleActivityDialog({ leadName, open, onClose }: {
         </div>
 
         <div className="flex gap-2 pt-1">
-          <button onClick={save} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
-            Schedule
+          <button onClick={save} disabled={activities.create.isPending}
+            className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-60">
+            {activities.create.isPending ? "Scheduling..." : "Schedule"}
           </button>
           <button onClick={onClose} className="flex-1 py-2 border border-border rounded-lg text-sm font-medium hover:bg-muted/50 transition-colors">Cancel</button>
         </div>
@@ -214,7 +232,6 @@ function AssignLeadDialog({ lead, agents, onAssign, onClose }: {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
       <div className="bg-card rounded-xl border border-border shadow-xl w-full max-w-md p-5 space-y-4">
-        {/* Header */}
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-foreground flex items-center gap-2">
             <UserPlus className="w-4 h-4 text-primary" />Assign Lead
@@ -222,7 +239,6 @@ function AssignLeadDialog({ lead, agents, onAssign, onClose }: {
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
         </div>
 
-        {/* Lead details card */}
         <div className="bg-muted/30 rounded-xl p-4 space-y-3 border border-border">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-2.5">
@@ -267,7 +283,6 @@ function AssignLeadDialog({ lead, agents, onAssign, onClose }: {
           </p>
         </div>
 
-        {/* Agent selector */}
         <div>
           <label className="text-xs font-medium text-muted-foreground block mb-1.5">Assign to Agent</label>
           <select value={selectedAgentId} onChange={e => setSelectedAgentId(e.target.value)}
@@ -292,14 +307,131 @@ function AssignLeadDialog({ lead, agents, onAssign, onClose }: {
   );
 }
 
+/* ─── Edit Lead Dialog ────────────────────────────────────────────── */
+function EditLeadDialog({ lead, agents, isSales, isPending, onSave, onClose }: {
+  lead: Lead;
+  agents: { id: number; name: string; role: string }[] | undefined;
+  isSales: boolean;
+  isPending: boolean;
+  onSave: (id: number, data: FormValues) => void;
+  onClose: () => void;
+}) {
+  const form = useForm<FormValues>({
+    resolver: zodResolver(leadSchema),
+    defaultValues: {
+      name:         lead.name,
+      email:        lead.email ?? "",
+      phone:        lead.phone ?? "",
+      source:       lead.source,
+      status:       lead.status,
+      score:        lead.score,
+      budget:       lead.budget ?? undefined,
+      propertyType: lead.propertyType ?? undefined,
+      notes:        lead.notes ?? undefined,
+      assignedTo:   lead.assignedTo ?? undefined,
+    },
+  });
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader><DialogTitle>Edit Lead — {lead.name}</DialogTitle></DialogHeader>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(v => onSave(lead.id, v))} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <FormField control={form.control} name="name" render={({ field }) => (
+                <FormItem><FormLabel>Full Name</FormLabel>
+                  <FormControl><Input placeholder="Rahul Sharma" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="email" render={({ field }) => (
+                <FormItem><FormLabel>Email</FormLabel>
+                  <FormControl><Input type="email" placeholder="rahul@example.com" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="phone" render={({ field }) => (
+                <FormItem><FormLabel>Mobile</FormLabel>
+                  <FormControl><Input placeholder="+91 98765 43210" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="source" render={({ field }) => (
+                <FormItem><FormLabel>Source</FormLabel>
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>{LEAD_SOURCES.map(s => <SelectItem key={s} value={s}>{s.replace(/_/g," ")}</SelectItem>)}</SelectContent>
+                  </Select><FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="status" render={({ field }) => (
+                <FormItem><FormLabel>Status</FormLabel>
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>{LEAD_STATUSES.map(s => <SelectItem key={s} value={s}>{stageLabel(s)}</SelectItem>)}</SelectContent>
+                  </Select><FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="score" render={({ field }) => (
+                <FormItem><FormLabel>Lead Score (0–100)</FormLabel>
+                  <FormControl><Input type="number" min={0} max={100} {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="budget" render={({ field }) => (
+                <FormItem><FormLabel>Budget (₹)</FormLabel>
+                  <FormControl><Input type="number" placeholder="5000000" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="propertyType" render={({ field }) => (
+                <FormItem><FormLabel>Property Type</FormLabel>
+                  <Select value={field.value ?? ""} onValueChange={field.onChange}>
+                    <SelectTrigger><SelectValue placeholder="Any" /></SelectTrigger>
+                    <SelectContent>{PROPERTY_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                  </Select><FormMessage />
+                </FormItem>
+              )} />
+              {!isSales && (
+                <FormField control={form.control} name="assignedTo" render={({ field }) => (
+                  <FormItem className="col-span-2"><FormLabel>Assign to Agent</FormLabel>
+                    <Select value={field.value?.toString() ?? ""} onValueChange={v => field.onChange(v ? Number(v) : undefined)}>
+                      <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
+                      <SelectContent>{(agents ?? []).map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}</SelectContent>
+                    </Select><FormMessage />
+                  </FormItem>
+                )} />
+              )}
+            </div>
+            <FormField control={form.control} name="notes" render={({ field }) => (
+              <FormItem><FormLabel>Notes / Last Remark</FormLabel>
+                <FormControl><Input placeholder="Any additional context..." {...field} /></FormControl>
+                <FormMessage />
+              </FormItem>
+            )} />
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+              <Button type="submit" disabled={isPending}>
+                {isPending ? "Saving..." : "Save Changes"}
+              </Button>
+            </div>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /* ─── Page ────────────────────────────────────────────────────────── */
 export default function LeadsPage() {
   const [search, setSearch]             = useState("");
   const [activeTab, setActiveTab]       = useState<string>("all");
   const [quickFilter, setQuickFilter]   = useState<string | null>(null);
   const [showCreate, setShowCreate]     = useState(false);
-  const [scheduleLead, setScheduleLead] = useState<{ id: number; name: string } | null>(null);
+  const [scheduleLead, setScheduleLead] = useState<{ id: number; name: string; phone?: string | null } | null>(null);
   const [assignLead, setAssignLead]     = useState<Lead | null>(null);
+  const [editLead, setEditLead]         = useState<Lead | null>(null);
   const [deleteLeadId, setDeleteLeadId] = useState<number | null>(null);
   const [deleteLeadName, setDeleteLeadName] = useState("");
   const qc = useQueryClient();
@@ -339,7 +471,7 @@ export default function LeadsPage() {
     },
   });
 
-  const updateLead = useUpdateLead({
+  const assignLeadMutation = useUpdateLead({
     mutation: {
       onSuccess: () => {
         qc.invalidateQueries({ queryKey: getGetLeadsQueryKey() });
@@ -351,17 +483,32 @@ export default function LeadsPage() {
     },
   });
 
+  const editLeadMutation = useUpdateLead({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getGetLeadsQueryKey() });
+        qc.invalidateQueries({ queryKey: getGetDashboardStatsQueryKey() });
+        setEditLead(null);
+        toast({ title: "Lead updated ✓" });
+      },
+      onError: () => toast({ title: "Failed to update lead", variant: "destructive" }),
+    },
+  });
+
   function handleAssign(leadId: number, agentId: number) {
-    updateLead.mutate({ id: leadId, data: { assignedTo: agentId } });
+    assignLeadMutation.mutate({ id: leadId, data: { assignedTo: agentId } });
+  }
+
+  function handleEditSave(id: number, values: FormValues) {
+    editLeadMutation.mutate({ id, data: { ...values, email: values.email || "", budget: values.budget ?? null, propertyType: values.propertyType ?? null, notes: values.notes ?? null, assignedTo: values.assignedTo ?? null } });
   }
 
   const form = useForm<FormValues>({
-    resolver: zodResolver(createLeadSchema),
+    resolver: zodResolver(leadSchema),
     defaultValues: { name: "", email: "", phone: "", source: "phone", status: "new", score: 50 },
   });
 
   function onSubmit(values: FormValues) {
-    // Sales: auto-assign to self using their linked agentId from auth
     const selfAgentId = isSales
       ? (authUser?.agentId ?? (agents ?? []).find(a => a.name === profile.name)?.id ?? null)
       : values.assignedTo ?? null;
@@ -369,7 +516,6 @@ export default function LeadsPage() {
     createLead.mutate({ data: { ...values, email: values.email || "", budget: values.budget ?? null, propertyType: values.propertyType ?? null, notes: values.notes ?? null, assignedTo: selfAgentId } });
   }
 
-  // Sales: filter to own leads only. Prefer agentId match; fall back to name match if agentId not linked yet.
   const allLeads = (leads ?? []).filter(l => {
     if (!isSales) return true;
     if (authUser?.agentId) return l.assignedTo === authUser.agentId;
@@ -378,14 +524,12 @@ export default function LeadsPage() {
   const today = new Date().toISOString().slice(0, 10);
   const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString();
 
-  /* Tab counts */
   const tabCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     LEAD_TABS.forEach(tab => {
       counts[tab.id] = allLeads.filter(l => (tab.statuses as readonly string[]).includes(l.status)).length;
     });
     counts.all = allLeads.filter(l => l.status === "new").length;
-    // unassigned count uses all leads (not filtered by agent) for owner/manager
     counts.unassigned = (leads ?? []).filter(l => l.status === "unassigned").length;
     return counts;
   }, [allLeads, leads]);
@@ -395,10 +539,8 @@ export default function LeadsPage() {
     [allLeads]
   );
 
-  /* Apply tab filter */
   const tabFiltered = useMemo(() => {
     if (activeTab === "unassigned") {
-      // Show all unassigned leads (not filtered by agent)
       return (leads ?? []).filter(l => l.status === "unassigned");
     }
     const tab = LEAD_TABS.find(t => t.id === activeTab);
@@ -406,7 +548,6 @@ export default function LeadsPage() {
     return allLeads.filter(l => (tab.statuses as readonly string[]).includes(l.status));
   }, [allLeads, leads, activeTab]);
 
-  /* Apply quick filter + search on top of tab */
   const displayed = useMemo(() => {
     let list = tabFiltered;
 
@@ -426,7 +567,6 @@ export default function LeadsPage() {
     return list;
   }, [tabFiltered, quickFilter, search, today, sevenDaysAgo]);
 
-  /* Derive a "project" label from propertyType for display */
   function projectLabel(lead: typeof allLeads[0]) {
     const map: Record<string, string> = {
       residential: "Prestige Lakeside",
@@ -437,7 +577,6 @@ export default function LeadsPage() {
     return lead.propertyType ? map[lead.propertyType] ?? "Prestige Lakeside" : "—";
   }
 
-  /* Scheduled date mock — show createdAt as "scheduled" date */
   function scheduledLabel(lead: typeof allLeads[0]) {
     return lead.createdAt.slice(0, 10);
   }
@@ -450,7 +589,9 @@ export default function LeadsPage() {
       {/* Schedule Activity Dialog */}
       {scheduleLead && (
         <ScheduleActivityDialog
+          leadId={scheduleLead.id}
           leadName={scheduleLead.name}
+          leadPhone={scheduleLead.phone}
           open={!!scheduleLead}
           onClose={() => setScheduleLead(null)}
         />
@@ -463,6 +604,18 @@ export default function LeadsPage() {
           agents={(agents ?? []).filter(a => a.role === "agent" || a.role === "broker" || a.role === "manager")}
           onAssign={handleAssign}
           onClose={() => setAssignLead(null)}
+        />
+      )}
+
+      {/* Edit Lead Dialog */}
+      {editLead && (
+        <EditLeadDialog
+          lead={editLead}
+          agents={agents}
+          isSales={isSales}
+          isPending={editLeadMutation.isPending}
+          onSave={handleEditSave}
+          onClose={() => setEditLead(null)}
         />
       )}
 
@@ -561,7 +714,6 @@ export default function LeadsPage() {
         </div>
       ) : (
         <div className="bg-card border border-card-border rounded-xl overflow-hidden">
-          {/* Table header summary */}
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-muted/20">
             <p className="text-xs text-muted-foreground">
               Showing <span className="font-semibold text-foreground">{displayed.length}</span> leads
@@ -674,7 +826,7 @@ export default function LeadsPage() {
                         ) : (
                           <>
                             <button title="Schedule Activity"
-                              onClick={() => setScheduleLead({ id: lead.id, name: lead.name })}
+                              onClick={() => setScheduleLead({ id: lead.id, name: lead.name, phone: lead.phone })}
                               className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors">
                               <Calendar className="w-3.5 h-3.5" />
                             </button>
@@ -691,6 +843,11 @@ export default function LeadsPage() {
                             </button>
                           </>
                         )}
+                        <button title="Edit Lead"
+                          onClick={() => setEditLead(lead)}
+                          className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors">
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
                         {role === "owner" && (
                           <button title="Delete" data-testid={`button-delete-lead-${lead.id}`}
                             onClick={() => { setDeleteLeadName(lead.name); setDeleteLeadId(lead.id); }}

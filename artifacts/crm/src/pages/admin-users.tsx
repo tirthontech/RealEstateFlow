@@ -299,7 +299,7 @@ export default function AdminUsersPage() {
                 </div>
 
                 {/* Email — optional, shown for agent roles */}
-                {!editUser && AGENT_ROLES.includes(form.role) && (
+                {!editUser && AGENT_ROLES.includes(form.role as any) && (
                   <div className="col-span-2">
                     <label className="text-xs font-medium text-muted-foreground block mb-1">
                       Work Email <span className="text-[10px] text-muted-foreground">(optional)</span>
@@ -315,7 +315,7 @@ export default function AdminUsersPage() {
                 )}
               </div>
 
-              {!editUser && AGENT_ROLES.includes(form.role) && (
+              {!editUser && AGENT_ROLES.includes(form.role as any) && (
                 <p className="text-[11px] text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
                   An agent profile will be created automatically and appear in the Agents section. Leads, deals and activities will be tracked under their profile.
                 </p>

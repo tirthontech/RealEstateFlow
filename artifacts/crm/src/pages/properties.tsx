@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import {
-  useGetProperties, useCreateProperty, useDeleteProperty,
+  useGetProperties, useCreateProperty, useUpdateProperty, useDeleteProperty,
   useGetLeads, useGetAgents,
   getGetPropertiesQueryKey, getGetDashboardStatsQueryKey, getGetLeadsQueryKey,
 } from "@workspace/api-client-react";
@@ -567,12 +567,103 @@ const createPropertySchema = z.object({
 });
 type FormValues = z.infer<typeof createPropertySchema>;
 
+/* ─── Edit Property Dialog ───────────────────────────────────────────── */
+function EditPropertyDialog({ prop, agents, isPending, onSave, onClose }: {
+  prop: { id: number; title: string; address: string; city: string; price: number; type: string; status: string; bedrooms?: number | null; bathrooms?: number | null; areaSqft?: number | null; description?: string | null; agentId?: number | null };
+  agents: { id: number; name: string }[] | undefined;
+  isPending: boolean;
+  onSave: (id: number, data: FormValues) => void;
+  onClose: () => void;
+}) {
+  const form = useForm<FormValues>({
+    resolver: zodResolver(createPropertySchema),
+    defaultValues: {
+      title: prop.title,
+      address: prop.address,
+      city: prop.city,
+      price: prop.price,
+      type: prop.type,
+      status: prop.status,
+      bedrooms: prop.bedrooms ?? undefined,
+      bathrooms: prop.bathrooms ?? undefined,
+      areaSqft: prop.areaSqft != null ? Number(prop.areaSqft) : undefined,
+      description: prop.description ?? undefined,
+      agentId: prop.agentId ?? undefined,
+    },
+  });
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader><DialogTitle>Edit Project — {prop.title}</DialogTitle></DialogHeader>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(v => onSave(prop.id, v))} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <FormField control={form.control} name="title" render={({ field }) => (
+                <FormItem className="col-span-2"><FormLabel>Project Name</FormLabel><FormControl><Input placeholder="Lodha World Towers" {...field} /></FormControl><FormMessage /></FormItem>
+              )} />
+              <FormField control={form.control} name="address" render={({ field }) => (
+                <FormItem className="col-span-2"><FormLabel>Address</FormLabel><FormControl><Input placeholder="Worli, Mumbai" {...field} /></FormControl><FormMessage /></FormItem>
+              )} />
+              <FormField control={form.control} name="city" render={({ field }) => (
+                <FormItem><FormLabel>City</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+              )} />
+              <FormField control={form.control} name="price" render={({ field }) => (
+                <FormItem><FormLabel>Starting Price (₹)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+              )} />
+              <FormField control={form.control} name="type" render={({ field }) => (
+                <FormItem><FormLabel>Type</FormLabel>
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>{PROPERTY_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                  </Select><FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="status" render={({ field }) => (
+                <FormItem><FormLabel>Status</FormLabel>
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>{PROPERTY_STATUSES.map(s => <SelectItem key={s} value={s}>{stageLabel(s)}</SelectItem>)}</SelectContent>
+                  </Select><FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="areaSqft" render={({ field }) => (
+                <FormItem><FormLabel>Total Area (sqft)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+              )} />
+              <FormField control={form.control} name="agentId" render={({ field }) => (
+                <FormItem><FormLabel>Project Manager</FormLabel>
+                  <Select value={field.value?.toString() ?? ""} onValueChange={(v) => field.onChange(v ? Number(v) : undefined)}>
+                    <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
+                    <SelectContent>{(agents ?? []).map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}</SelectContent>
+                  </Select><FormMessage />
+                </FormItem>
+              )} />
+            </div>
+            <FormField control={form.control} name="description" render={({ field }) => (
+              <FormItem><FormLabel>Description / USPs</FormLabel>
+                <FormControl><textarea rows={3} placeholder="2BHK & 3BHK homes with sea view..."
+                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none" {...field} /></FormControl>
+                <FormMessage />
+              </FormItem>
+            )} />
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+              <Button type="submit" disabled={isPending}>{isPending ? "Saving..." : "Save Changes"}</Button>
+            </div>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /* ─── Page ───────────────────────────────────────────────────────────── */
 export default function PropertiesPage() {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [showCreate, setShowCreate] = useState(false);
+  const [editProp, setEditProp] = useState<typeof filtered[0] | null>(null);
   const [siteVisitProp, setSiteVisitProp] = useState<{ id: number; title: string } | null>(null);
   const [infoCard, setInfoCard] = useState<number | null>(null);
   const [inventoryCard, setInventoryCard] = useState<number | null>(null); // which property shows units panel
@@ -608,6 +699,17 @@ export default function PropertiesPage() {
       onError: () => toast({ title: "Error adding property", variant: "destructive" }),
     },
   });
+  const updateProperty = useUpdateProperty({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getGetPropertiesQueryKey() });
+        qc.invalidateQueries({ queryKey: getGetDashboardStatsQueryKey() });
+        setEditProp(null);
+        toast({ title: "Property updated ✓" });
+      },
+      onError: () => toast({ title: "Failed to update property", variant: "destructive" }),
+    },
+  });
   const deleteProperty = useDeleteProperty({
     mutation: {
       onSuccess: () => {
@@ -633,6 +735,15 @@ export default function PropertiesPage() {
     <div className="p-6 space-y-5">
       {siteVisitProp && (
         <SiteVisitDialog propertyTitle={siteVisitProp.title} open={!!siteVisitProp} onClose={() => setSiteVisitProp(null)} />
+      )}
+      {editProp && (
+        <EditPropertyDialog
+          prop={editProp as any}
+          agents={agents}
+          isPending={updateProperty.isPending}
+          onSave={(id, values) => updateProperty.mutate({ id, data: { ...values, bedrooms: values.bedrooms ?? null, bathrooms: values.bathrooms ?? null, areaSqft: values.areaSqft ?? null, description: values.description ?? null, agentId: values.agentId ?? null } })}
+          onClose={() => setEditProp(null)}
+        />
       )}
       <ConfirmDeleteDialog
         open={deletePropId !== null}
@@ -705,12 +816,20 @@ export default function PropertiesPage() {
                       <MapPin className="w-3 h-3 flex-shrink-0" />{prop.address}, {prop.city}
                     </p>
                   </div>
-                  {role === "owner" && (
-                    <Button size="icon" variant="ghost" className="h-7 w-7 flex-shrink-0 text-destructive hover:text-destructive ml-2"
-                      data-testid={`button-delete-property-${prop.id}`}
-                      onClick={(e) => { e.stopPropagation(); setDeletePropTitle(prop.title); setDeletePropId(prop.id); }}>
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
+                  {(role === "owner" || role === "manager") && (
+                    <div className="flex items-center gap-0.5 ml-2">
+                      <Button size="icon" variant="ghost" className="h-7 w-7 flex-shrink-0 text-muted-foreground hover:text-primary"
+                        onClick={(e) => { e.stopPropagation(); setEditProp(prop); }}>
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </Button>
+                      {role === "owner" && (
+                        <Button size="icon" variant="ghost" className="h-7 w-7 flex-shrink-0 text-destructive hover:text-destructive"
+                          data-testid={`button-delete-property-${prop.id}`}
+                          onClick={(e) => { e.stopPropagation(); setDeletePropTitle(prop.title); setDeletePropId(prop.id); }}>
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
+                    </div>
                   )}
                 </div>
 

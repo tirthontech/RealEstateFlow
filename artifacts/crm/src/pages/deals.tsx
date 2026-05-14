@@ -8,7 +8,7 @@ import {
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -47,7 +47,7 @@ type Deal = {
   updatedAt: string;
 };
 
-function DealCard({ deal, onDelete, onStageChange, canDelete }: { deal: Deal; onDelete: () => void; onStageChange: (stage: string) => void; canDelete?: boolean }) {
+function DealCard({ deal, onDelete, onEdit, onStageChange, canDelete }: { deal: Deal; onDelete: () => void; onEdit: () => void; onStageChange: (stage: string) => void; canDelete?: boolean }) {
   const [dragging, setDragging] = useState(false);
   return (
     <div
@@ -59,13 +59,19 @@ function DealCard({ deal, onDelete, onStageChange, canDelete }: { deal: Deal; on
     >
       <div className="flex items-start justify-between gap-2">
         <p className="font-medium text-sm text-foreground leading-snug flex-1">{deal.title}</p>
-        {canDelete && (
-          <Button size="icon" variant="ghost" className="h-6 w-6 flex-shrink-0 text-muted-foreground hover:text-destructive"
-            data-testid={`button-delete-deal-${deal.id}`}
-            onClick={(e) => { e.stopPropagation(); onDelete(); }}>
-            <Trash2 className="w-3 h-3" />
+        <div className="flex items-center gap-0.5 flex-shrink-0">
+          <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:text-primary"
+            onClick={(e) => { e.stopPropagation(); onEdit(); }}>
+            <Pencil className="w-3 h-3" />
           </Button>
-        )}
+          {canDelete && (
+            <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:text-destructive"
+              data-testid={`button-delete-deal-${deal.id}`}
+              onClick={(e) => { e.stopPropagation(); onDelete(); }}>
+              <Trash2 className="w-3 h-3" />
+            </Button>
+          )}
+        </div>
       </div>
       <p className="text-base font-bold text-primary mt-1">{formatCurrency(deal.value)}</p>
       {deal.leadName && <p className="text-xs text-muted-foreground mt-1.5">{deal.leadName}</p>}
@@ -75,10 +81,11 @@ function DealCard({ deal, onDelete, onStageChange, canDelete }: { deal: Deal; on
   );
 }
 
-function KanbanColumn({ stage, deals, onDelete, onDrop, canDelete }: {
+function KanbanColumn({ stage, deals, onDelete, onEdit, onDrop, canDelete }: {
   stage: string;
   deals: Deal[];
   onDelete: (id: number) => void;
+  onEdit: (deal: Deal) => void;
   onDrop: (dealId: number, stage: string) => void;
   canDelete?: boolean;
 }) {
@@ -106,7 +113,7 @@ function KanbanColumn({ stage, deals, onDelete, onDrop, canDelete }: {
       </div>
       <div className="p-2 space-y-2 flex-1 min-h-20 overflow-y-auto max-h-[calc(100vh-240px)]">
         {deals.map((deal) => (
-          <DealCard key={deal.id} deal={deal} onDelete={() => onDelete(deal.id)} onStageChange={(s) => onDrop(deal.id, s)} canDelete={canDelete} />
+          <DealCard key={deal.id} deal={deal} onDelete={() => onDelete(deal.id)} onEdit={() => onEdit(deal)} onStageChange={(s) => onDrop(deal.id, s)} canDelete={canDelete} />
         ))}
         {deals.length === 0 && (
           <div className="flex items-center justify-center h-16 text-xs text-muted-foreground/50">Drop here</div>
@@ -116,8 +123,98 @@ function KanbanColumn({ stage, deals, onDelete, onDrop, canDelete }: {
   );
 }
 
+function EditDealDialog({ deal, leads, properties, agents, isSales, isPending, onSave, onClose }: {
+  deal: Deal;
+  leads: { id: number; name: string }[] | undefined;
+  properties: { id: number; title: string }[] | undefined;
+  agents: { id: number; name: string }[] | undefined;
+  isSales: boolean;
+  isPending: boolean;
+  onSave: (id: number, data: FormValues) => void;
+  onClose: () => void;
+}) {
+  const form = useForm<FormValues>({
+    resolver: zodResolver(createDealSchema),
+    defaultValues: {
+      title: deal.title,
+      value: deal.value,
+      stage: deal.stage,
+      leadId: (deal as any).leadId ?? undefined,
+      propertyId: (deal as any).propertyId ?? undefined,
+      agentId: (deal as any).agentId ?? undefined,
+      closingDate: deal.closingDate ? deal.closingDate.slice(0, 10) : undefined,
+      notes: deal.notes ?? undefined,
+    },
+  });
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader><DialogTitle>Edit Deal — {deal.title}</DialogTitle></DialogHeader>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(v => onSave(deal.id, v))} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <FormField control={form.control} name="title" render={({ field }) => (
+                <FormItem className="col-span-2"><FormLabel>Deal Title</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+              )} />
+              <FormField control={form.control} name="value" render={({ field }) => (
+                <FormItem><FormLabel>Value (₹)</FormLabel><FormControl><Input type="number" {...field} /></FormControl><FormMessage /></FormItem>
+              )} />
+              <FormField control={form.control} name="stage" render={({ field }) => (
+                <FormItem><FormLabel>Stage</FormLabel>
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>{STAGES.map(s => <SelectItem key={s} value={s}>{stageLabel(s)}</SelectItem>)}</SelectContent>
+                  </Select><FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="leadId" render={({ field }) => (
+                <FormItem><FormLabel>Lead</FormLabel>
+                  <Select value={field.value?.toString() ?? ""} onValueChange={(v) => field.onChange(v ? Number(v) : undefined)}>
+                    <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+                    <SelectContent>{(leads ?? []).map(l => <SelectItem key={l.id} value={String(l.id)}>{l.name}</SelectItem>)}</SelectContent>
+                  </Select><FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="propertyId" render={({ field }) => (
+                <FormItem><FormLabel>Property</FormLabel>
+                  <Select value={field.value?.toString() ?? ""} onValueChange={(v) => field.onChange(v ? Number(v) : undefined)}>
+                    <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+                    <SelectContent>{(properties ?? []).map(p => <SelectItem key={p.id} value={String(p.id)}>{p.title}</SelectItem>)}</SelectContent>
+                  </Select><FormMessage />
+                </FormItem>
+              )} />
+              {!isSales && (
+                <FormField control={form.control} name="agentId" render={({ field }) => (
+                  <FormItem><FormLabel>Agent</FormLabel>
+                    <Select value={field.value?.toString() ?? ""} onValueChange={(v) => field.onChange(v ? Number(v) : undefined)}>
+                      <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+                      <SelectContent>{(agents ?? []).map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}</SelectContent>
+                    </Select><FormMessage />
+                  </FormItem>
+                )} />
+              )}
+              <FormField control={form.control} name="closingDate" render={({ field }) => (
+                <FormItem><FormLabel>Expected Close</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
+              )} />
+            </div>
+            <FormField control={form.control} name="notes" render={({ field }) => (
+              <FormItem><FormLabel>Notes</FormLabel><FormControl><Input placeholder="Additional notes..." {...field} /></FormControl><FormMessage /></FormItem>
+            )} />
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+              <Button type="submit" disabled={isPending}>{isPending ? "Saving..." : "Save Changes"}</Button>
+            </div>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function DealsPage() {
   const [showCreate, setShowCreate] = useState(false);
+  const [editDeal, setEditDeal] = useState<Deal | null>(null);
   const [deleteDealId, setDeleteDealId] = useState<number | null>(null);
   const [deleteDealTitle, setDeleteDealTitle] = useState("");
   const qc = useQueryClient();
@@ -156,6 +253,19 @@ export default function DealsPage() {
         qc.invalidateQueries({ queryKey: getGetDashboardStatsQueryKey() });
         qc.invalidateQueries({ queryKey: getGetDashboardPipelineQueryKey() });
       },
+    },
+  });
+
+  const editDealMutation = useUpdateDeal({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getGetDealsQueryKey() });
+        qc.invalidateQueries({ queryKey: getGetDashboardStatsQueryKey() });
+        qc.invalidateQueries({ queryKey: getGetDashboardPipelineQueryKey() });
+        setEditDeal(null);
+        toast({ title: "Deal updated ✓" });
+      },
+      onError: () => toast({ title: "Failed to update deal", variant: "destructive" }),
     },
   });
 
@@ -206,6 +316,18 @@ export default function DealsPage() {
 
   return (
     <div className="p-6 space-y-5">
+      {editDeal && (
+        <EditDealDialog
+          deal={editDeal}
+          leads={leads}
+          properties={properties}
+          agents={agents}
+          isSales={isSales}
+          isPending={editDealMutation.isPending}
+          onSave={(id, values) => editDealMutation.mutate({ id, data: { ...values, leadId: values.leadId ?? null, propertyId: values.propertyId ?? null, agentId: values.agentId ?? null, closingDate: values.closingDate ?? null, notes: values.notes ?? null } })}
+          onClose={() => setEditDeal(null)}
+        />
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">
@@ -236,6 +358,7 @@ export default function DealsPage() {
                 setDeleteDealTitle(deal?.title ?? "this deal");
                 setDeleteDealId(id);
               }}
+              onEdit={(deal) => setEditDeal(deal)}
               onDrop={handleDrop}
               canDelete={isOwner}
             />

@@ -41,6 +41,7 @@ export const LEAD_SOURCES = ["99acres", "magicbricks", "housing", "facebook", "g
 export const PROPERTY_TYPES = ["residential", "commercial", "land", "rental"] as const;
 export const PROPERTY_STATUSES = ["available", "under_offer", "sold", "withdrawn"] as const;
 export const AGENT_ROLES = ["manager", "agent", "broker"] as const;
+export const MARKETS = ["Mumbai", "Pune", "Bengaluru", "Delhi NCR", "Hyderabad", "Chennai", "Ahmedabad", "Kolkata"] as const;
 
 export function statusColor(status: string): string {
   const map: Record<string, string> = {
