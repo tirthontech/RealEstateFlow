@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import {
   useGetProperties, useCreateProperty, useUpdateProperty, useDeleteProperty,
-  useGetLeads, useGetAgents,
+  useGetLeads, useGetAgents, customFetch,
   getGetPropertiesQueryKey, getGetDashboardStatsQueryKey, getGetLeadsQueryKey,
 } from "@workspace/api-client-react";
 import { useForm } from "react-hook-form";
@@ -12,7 +12,7 @@ import { z } from "zod";
 import {
   Plus, Search, Trash2, BedDouble, Bath, Maximize2, Calendar, MapPin,
   Info, X, ChevronDown, ChevronUp, Package, FileText, IndianRupee,
-  Lock, CheckCircle2, Edit2, Layers,
+  Lock, CheckCircle2, Edit2, Layers, Building2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -493,8 +493,8 @@ function UnitsPanel({
 }
 
 /* ─── Site Visit Dialog (salesperson) ───────────────────────────────── */
-function SiteVisitDialog({ propertyTitle, open, onClose }: {
-  propertyTitle: string; open: boolean; onClose: () => void;
+function SiteVisitDialog({ propertyTitle, propertyId, open, onClose }: {
+  propertyTitle: string; propertyId: number; open: boolean; onClose: () => void;
 }) {
   const { data: leads } = useGetLeads({}, { query: { queryKey: getGetLeadsQueryKey({}) } });
   const { toast } = useToast();
@@ -502,11 +502,32 @@ function SiteVisitDialog({ propertyTitle, open, onClose }: {
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [time, setTime] = useState("10:00");
   const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  function handleBook() {
-    const lead = (leads ?? []).find(l => String(l.id) === leadId);
-    toast({ title: `Site visit booked for ${lead?.name ?? "lead"} at ${propertyTitle} on ${date}` });
-    onClose();
+  async function handleBook() {
+    if (!leadId || !date) return;
+    setSaving(true);
+    try {
+      const lead = (leads ?? []).find(l => String(l.id) === leadId);
+      await customFetch("/api/viewings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          leadId: parseInt(leadId),
+          propertyId,
+          date,
+          time,
+          notes: note || null,
+          status: "pending",
+        }),
+      });
+      toast({ title: `Site visit booked for ${lead?.name ?? "lead"} at ${propertyTitle} on ${date}` });
+      onClose();
+    } catch {
+      toast({ title: "Failed to book site visit", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
   }
 
   if (!open) return null;
@@ -540,11 +561,11 @@ function SiteVisitDialog({ propertyTitle, open, onClose }: {
           <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} placeholder="Any special instructions..."
             className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none" /></div>
         <div className="flex gap-2 pt-1">
-          <button disabled={!leadId} onClick={handleBook}
+          <button disabled={!leadId || !date || saving} onClick={handleBook}
             className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50">
-            Confirm Visit
+            {saving ? "Booking…" : "Confirm Visit"}
           </button>
-          <button onClick={onClose} className="flex-1 py-2 border border-border rounded-lg text-sm font-medium hover:bg-muted/50 transition-colors">Cancel</button>
+          <button onClick={onClose} disabled={saving} className="flex-1 py-2 border border-border rounded-lg text-sm font-medium hover:bg-muted/50 transition-colors">Cancel</button>
         </div>
       </div>
     </div>
@@ -683,6 +704,7 @@ export default function PropertiesPage() {
   };
   const { data: properties, isLoading } = useGetProperties(params, { query: { queryKey: getGetPropertiesQueryKey(params) } });
   const { data: agents } = useGetAgents();
+  const managerAgents = (agents ?? []).filter(a => a.role === "manager");
 
   const filtered = (properties ?? []).filter(p =>
     !search || p.title.toLowerCase().includes(search.toLowerCase()) || p.city.toLowerCase().includes(search.toLowerCase())
@@ -734,12 +756,12 @@ export default function PropertiesPage() {
   return (
     <div className="p-6 space-y-5">
       {siteVisitProp && (
-        <SiteVisitDialog propertyTitle={siteVisitProp.title} open={!!siteVisitProp} onClose={() => setSiteVisitProp(null)} />
+        <SiteVisitDialog propertyTitle={siteVisitProp.title} propertyId={siteVisitProp.id} open={!!siteVisitProp} onClose={() => setSiteVisitProp(null)} />
       )}
       {editProp && (
         <EditPropertyDialog
           prop={editProp as any}
-          agents={agents}
+          agents={managerAgents}
           isPending={updateProperty.isPending}
           onSave={(id, values) => updateProperty.mutate({ id, data: { ...values, bedrooms: values.bedrooms ?? null, bathrooms: values.bathrooms ?? null, areaSqft: values.areaSqft ?? null, description: values.description ?? null, agentId: values.agentId ?? null } })}
           onClose={() => setEditProp(null)}
@@ -796,8 +818,13 @@ export default function PropertiesPage() {
           {[...Array(6)].map((_, i) => <div key={i} className="h-48 bg-muted rounded-lg animate-pulse" />)}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="bg-card border border-card-border rounded-lg py-16 text-center">
-          <p className="text-muted-foreground text-sm">No projects found</p>
+        <div className="bg-card border border-card-border rounded-xl py-16 text-center space-y-2">
+          <Building2 className="w-10 h-10 mx-auto text-muted-foreground/30" />
+          <p className="text-sm font-medium text-foreground">No projects found</p>
+          <p className="text-xs text-muted-foreground">{search || typeFilter !== "all" || statusFilter !== "all" ? "Try adjusting your filters" : "Add your first project to start tracking inventory and bookings"}</p>
+          {!isSales && !search && typeFilter === "all" && statusFilter === "all" && (
+            <Button className="mt-2 gap-2 text-xs h-8" onClick={() => setShowCreate(true)}><Plus className="w-3.5 h-3.5" />Add Project</Button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -896,6 +923,65 @@ export default function PropertiesPage() {
         </div>
       )}
 
+      {/* Portfolio Analysis */}
+      {!isSales && (properties ?? []).length > 0 && (
+        <div className="space-y-4 pt-2 border-t border-border">
+          <div>
+            <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <Layers className="w-4 h-4 text-primary" />Portfolio Analysis
+            </h2>
+            <p className="text-xs text-muted-foreground mt-0.5">Value breakdown across all properties</p>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {(() => {
+              const all = properties ?? [];
+              const total = all.reduce((s, p) => s + p.price, 0);
+              const avail = all.filter(p => p.status === "available");
+              const sold = all.filter(p => p.status === "sold");
+              const offer = all.filter(p => p.status === "under_offer");
+              return [
+                { label: "Total Portfolio", value: formatCurrency(total), sub: `${all.length} properties`, cls: "border-l-blue-500" },
+                { label: "Available", value: formatCurrency(avail.reduce((s,p)=>s+p.price,0)), sub: `${avail.length} properties`, cls: "border-l-green-500" },
+                { label: "Under Offer", value: formatCurrency(offer.reduce((s,p)=>s+p.price,0)), sub: `${offer.length} properties`, cls: "border-l-amber-500" },
+                { label: "Sold", value: formatCurrency(sold.reduce((s,p)=>s+p.price,0)), sub: `${sold.length} properties`, cls: "border-l-slate-400" },
+              ].map(k => (
+                <div key={k.label} className={cn("bg-card border border-card-border rounded-xl p-4 border-l-4", k.cls)}>
+                  <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">{k.label}</p>
+                  <p className="text-lg font-bold text-foreground mt-1">{k.value}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">{k.sub}</p>
+                </div>
+              ));
+            })()}
+          </div>
+          <div className="bg-card border border-card-border rounded-xl overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/20">
+                  {["Property","City","Type","Status","Price"].map(h => (
+                    <th key={h} className="text-left px-4 py-2.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {(properties ?? []).map(p => (
+                  <tr key={p.id} className="hover:bg-muted/20 transition-colors cursor-pointer" onClick={() => setEditProp(p)}>
+                    <td className="px-4 py-3 font-medium text-foreground text-xs">{p.title}</td>
+                    <td className="px-4 py-3 text-muted-foreground text-xs">{p.city}</td>
+                    <td className="px-4 py-3 text-xs capitalize">{p.type}</td>
+                    <td className="px-4 py-3">
+                      <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap", statusColor(p.status))}>
+                        {p.status.replace(/_/g, " ")}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 font-semibold text-xs whitespace-nowrap">{formatCurrency(p.price)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* Add Project Dialog */}
       <Dialog open={!isSales && showCreate} onOpenChange={setShowCreate}>
         <DialogContent className="max-w-lg">
@@ -938,7 +1024,7 @@ export default function PropertiesPage() {
                   <FormItem><FormLabel>Project Manager</FormLabel>
                     <Select value={field.value?.toString() ?? ""} onValueChange={(v) => field.onChange(v ? Number(v) : undefined)}>
                       <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
-                      <SelectContent>{(agents ?? []).map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}</SelectContent>
+                      <SelectContent>{managerAgents.map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}</SelectContent>
                     </Select><FormMessage />
                   </FormItem>
                 )} />

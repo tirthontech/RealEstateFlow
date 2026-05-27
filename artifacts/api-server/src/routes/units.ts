@@ -65,8 +65,8 @@ router.post("/units", ownerOrManager, async (req, res): Promise<void> => {
   res.status(201).json(fmt(unit));
 });
 
-// PUT /units/:id  — update status, block, book, or edit details
-router.put("/units/:id", async (req, res): Promise<void> => {
+// PUT /units/:id  — update status, block, book, or edit details — owner or manager only
+router.put("/units/:id", ownerOrManager, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   const { status, blockedByLeadId, unitNo, bhkType, floor, facing, carpetArea, saleableArea, bsp, plcCharges, parkingCharges, isPremium, notes } = req.body ?? {};
 

@@ -12,6 +12,11 @@ import viewingsRouter from "./viewings";
 import unitsRouter from "./units";
 import notificationsRouter from "./notifications";
 import activitiesRouter from "./activities";
+import commissionsRouter from "./commissions";
+import approvalsRouter from "./approvals";
+import adSpendRouter from "./ad-spend";
+import projectFinancialsRouter from "./project-financials";
+import paymentPlansRouter from "./payment-plans";
 
 const router: IRouter = Router();
 
@@ -33,5 +38,10 @@ router.use(viewingsRouter);
 router.use(unitsRouter);
 router.use(notificationsRouter);
 router.use(activitiesRouter);
+router.use(commissionsRouter);
+router.use(approvalsRouter);
+router.use(adSpendRouter);
+router.use(projectFinancialsRouter);
+router.use(paymentPlansRouter);
 
 export default router;

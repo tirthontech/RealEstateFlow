@@ -1,20 +1,20 @@
 import { useState, useMemo } from "react";
-import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
 import {
   useGetDashboardStats, useGetDashboardPipeline, useGetRecentActivity,
   useGetLeadSources, useGetLeads, useGetAgents, getGetLeadsQueryKey,
-  useCreateLead,
+  useCreateLead, customFetch,
 } from "@workspace/api-client-react";
 import type { DashboardStats, LeadSource, PipelineStage, ActivityItem } from "@workspace/api-client-react";
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from "recharts";
 import {
   Building2, Users, TrendingUp, GitBranch, Activity, ArrowUpRight, ArrowDownRight,
   AlertTriangle, CheckCircle2, Clock, Target, DollarSign, BarChart3, Layers,
   UserCheck, ChevronRight, Home, ShieldCheck, Zap, XCircle, TrendingDown, Calendar,
-  Pencil, Plus, CheckCheck, Phone, X, HandCoins, BarChart2, Flame, Thermometer,
+  Pencil, Plus, Phone, X, HandCoins, BarChart2, Flame,
 } from "lucide-react";
 import { cn, formatCurrency, stageLabel, timeAgo, scoreColor, statusColor } from "@/lib/utils";
 import { Link } from "wouter";
@@ -43,31 +43,41 @@ function SectionTitle({ icon: Icon, title, sub, action }: {
   );
 }
 
-/* Redesigned KPI card — icon left, label/value/trend stacked right */
+/* KPI card — Koshpal-style: icon circle top-left, value prominent, no border accent */
+const ACCENT_MAP: Record<string, { bg: string; text: string }> = {
+  "border-l-blue-500":    { bg: "bg-blue-50",    text: "text-blue-600" },
+  "border-l-green-500":   { bg: "bg-green-50",   text: "text-green-600" },
+  "border-l-amber-500":   { bg: "bg-amber-50",   text: "text-amber-600" },
+  "border-l-red-400":     { bg: "bg-red-50",     text: "text-red-500" },
+  "border-l-red-500":     { bg: "bg-red-50",     text: "text-red-600" },
+  "border-l-purple-500":  { bg: "bg-purple-50",  text: "text-purple-600" },
+  "border-l-emerald-500": { bg: "bg-emerald-50", text: "text-emerald-600" },
+  "border-l-indigo-500":  { bg: "bg-indigo-50",  text: "text-indigo-600" },
+  "border-l-teal-500":    { bg: "bg-teal-50",    text: "text-teal-600" },
+  "border-l-orange-500":  { bg: "bg-orange-50",  text: "text-orange-600" },
+};
+
 function KpiCard({ label, value, sub, icon: Icon, accent, trend, up }: {
   label: string; value: string; sub?: string; icon: React.ElementType;
   accent?: string; trend?: string; up?: boolean;
 }) {
+  const { bg: iconBg, text: iconText } = ACCENT_MAP[accent ?? ""] ?? { bg: "bg-primary/10", text: "text-primary" };
   return (
-    <Card className={cn("border-l-4 hover:shadow-md transition-shadow", accent ?? "border-l-primary")}>
-      <div className="flex items-center gap-3">
-        <div className="p-2 rounded-lg bg-primary/10 text-primary flex-shrink-0">
-          <Icon className="w-4 h-4" />
+    <Card className="hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
+      <div className="flex items-start justify-between gap-2 mb-3">
+        <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0", iconBg)}>
+          <Icon className={cn("w-5 h-5", iconText)} />
         </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-[10px] sm:text-[11px] text-muted-foreground font-semibold uppercase tracking-wider truncate">{label}</p>
-          <div className="flex items-baseline gap-1.5 flex-wrap">
-            <p className="text-lg sm:text-xl font-bold text-foreground leading-none">{value}</p>
-            {trend && (
-              <span className={cn("inline-flex items-center gap-0.5 text-[10px] font-semibold px-1 py-0.5 rounded-full flex-shrink-0",
-                up ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600")}>
-                {up ? <ArrowUpRight className="w-2.5 h-2.5" /> : <ArrowDownRight className="w-2.5 h-2.5" />}{trend}
-              </span>
-            )}
-          </div>
-          {sub && <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 truncate">{sub}</p>}
-        </div>
+        {trend && (
+          <span className={cn("inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0",
+            up ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600")}>
+            {up ? <ArrowUpRight className="w-2.5 h-2.5" /> : <ArrowDownRight className="w-2.5 h-2.5" />}{trend}
+          </span>
+        )}
       </div>
+      <p className="text-[10px] sm:text-[11px] text-muted-foreground font-semibold uppercase tracking-wider truncate">{label}</p>
+      <p className="text-xl sm:text-2xl font-bold text-foreground leading-none mt-1">{value}</p>
+      {sub && <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 truncate">{sub}</p>}
     </Card>
   );
 }
@@ -81,119 +91,13 @@ function ScrollTable({ children, minWidth = 520 }: { children: React.ReactNode; 
   );
 }
 
-/* ─── Mock data ───────────────────────────────────────────────────────── */
-const PROJECTS = [
-  { id: 1, name: "Prestige Lakeside",       location: "Whitefield, Bangalore",   type: "Residential", totalUnits: 120, sold: 78,  available: 32, underReview: 10, issues: 3, timeline: 72, completionDate: "Dec 2025", pricePerSqft: 8500,  avgSqft: 1200, status: "Under Construction", pendingApprovals: 2 },
-  { id: 2, name: "Godrej Summit",            location: "Hinjewadi, Pune",          type: "Residential", totalUnits: 200, sold: 158, available: 42, underReview: 0,  issues: 1, timeline: 95, completionDate: "Apr 2026", pricePerSqft: 6800,  avgSqft: 1400, status: "Ready to Move",       pendingApprovals: 0 },
-  { id: 3, name: "DLF Cybercity",            location: "Sector 54, Gurugram",      type: "Commercial",  totalUnits: 80,  sold: 22,  available: 50, underReview: 8,  issues: 5, timeline: 38, completionDate: "Mar 2027", pricePerSqft: 14200, avgSqft: 900,  status: "Under Construction", pendingApprovals: 5 },
-  { id: 4, name: "Sobha Royal Crest",        location: "Sarjapur Road, Bangalore", type: "Residential", totalUnits: 150, sold: 91,  available: 45, underReview: 14, issues: 0, timeline: 60, completionDate: "Sep 2026", pricePerSqft: 9800,  avgSqft: 1600, status: "Under Construction", pendingApprovals: 3 },
-];
 
-const MILESTONES: Record<number, { name: string; done: boolean; delayed: boolean; reason?: string }[]> = {
-  1: [
-    { name: "Foundation", done: true,  delayed: false },
-    { name: "Slab Work",  done: true,  delayed: true,  reason: "Monsoon delay" },
-    { name: "Brickwork",  done: true,  delayed: true,  reason: "Material shortage" },
-    { name: "Plastering", done: true,  delayed: true,  reason: "Labour dispute" },
-    { name: "Finishing",  done: false, delayed: false },
-    { name: "OC/Handover",done: false, delayed: false },
-  ],
-  2: [
-    { name: "Foundation", done: true,  delayed: false },
-    { name: "Slab Work",  done: true,  delayed: false },
-    { name: "Brickwork",  done: true,  delayed: false },
-    { name: "Plastering", done: true,  delayed: false },
-    { name: "Finishing",  done: true,  delayed: false },
-    { name: "OC/Handover",done: false, delayed: false },
-  ],
-  3: [
-    { name: "Foundation", done: true,  delayed: false },
-    { name: "Slab Work",  done: true,  delayed: true,  reason: "Ground stability" },
-    { name: "Brickwork",  done: false, delayed: true,  reason: "Structural approval pending" },
-    { name: "Plastering", done: false, delayed: false },
-    { name: "Finishing",  done: false, delayed: false },
-    { name: "OC/Handover",done: false, delayed: false },
-  ],
-  4: [
-    { name: "Foundation", done: true,  delayed: false },
-    { name: "Slab Work",  done: true,  delayed: false },
-    { name: "Brickwork",  done: true,  delayed: false },
-    { name: "Plastering", done: false, delayed: false },
-    { name: "Finishing",  done: false, delayed: false },
-    { name: "OC/Handover",done: false, delayed: false },
-  ],
-};
-
-const BLOCKED_UNITS = [
-  { unit: "A-302", project: "Prestige Lakeside",  buyer: "Arjun Kapoor",  salesperson: "Rahul Gupta",  days: 9,  expected: "May 15" },
-  { unit: "C-108", project: "DLF Cybercity",      buyer: "Sanjay Mehta",  salesperson: "Arjun Mehta",  days: 12, expected: "May 18" },
-  { unit: "B-506", project: "Sobha Royal Crest",  buyer: "Priya Verma",   salesperson: "Riya Sharma",  days: 8,  expected: "May 14" },
-];
-
-const CASH_FLOW = [
-  { project: "Prestige Lakeside",  invested: 4_80_00_000, collected: 3_40_00_000, outstanding: 1_40_00_000, expectedRevenue: 5_50_00_000, margin: 14.6 },
-  { project: "Godrej Summit",      invested: 8_20_00_000, collected: 7_90_00_000, outstanding: 30_00_000,   expectedRevenue: 9_50_00_000, margin: 15.8 },
-  { project: "DLF Cybercity",      invested: 6_50_00_000, collected: 1_80_00_000, outstanding: 4_70_00_000, expectedRevenue: 10_20_00_000, margin: 36.4 },
-  { project: "Sobha Royal Crest",  invested: 7_10_00_000, collected: 5_30_00_000, outstanding: 1_80_00_000, expectedRevenue: 8_80_00_000, margin: 19.4 },
-];
-
-const OVERDUE_COLLECTIONS = [
-  { buyer: "Amit Jain",     unit: "B-105", project: "Godrej Summit",   dueDate: "Apr 15", amount: 15_00_000, days: 22 },
-  { buyer: "Sunita Sharma", unit: "A-302", project: "Prestige Lakeside", dueDate: "Apr 20", amount: 8_50_000, days: 17 },
-  { buyer: "Vikram Singh",  unit: "D-201", project: "Sobha Royal Crest", dueDate: "Apr 28", amount: 22_00_000, days: 9  },
-  { buyer: "Deepa Nair",    unit: "C-109", project: "DLF Cybercity",   dueDate: "May 1",  amount: 35_00_000, days: 6  },
-];
-
-const MONTHLY_CF = [
-  { month: "Jan", inflow: 82, outflow: 45 }, { month: "Feb", inflow: 95, outflow: 60 },
-  { month: "Mar", inflow: 110, outflow: 72 }, { month: "Apr", inflow: 88, outflow: 55 },
-  { month: "May", inflow: 130, outflow: 80 }, { month: "Jun", inflow: 145, outflow: 90 },
-  { month: "Jul", inflow: 120, outflow: 75 }, { month: "Aug", inflow: 160, outflow: 95 },
-];
-
-const LOST_REASONS = [
-  { reason: "Budget too high",          count: 8,  pct: 35, color: "#ef4444" },
-  { reason: "Location preference",      count: 5,  pct: 22, color: "#f59e0b" },
-  { reason: "Competitor offering",      count: 4,  pct: 17, color: "#8b5cf6" },
-  { reason: "Project delay concern",    count: 3,  pct: 13, color: "#3b82f6" },
-  { reason: "Config unavailable",       count: 2,  pct: 9,  color: "#10b981" },
-  { reason: "No response",             count: 1,  pct: 4,  color: "#6b7280" },
-];
-
-const SOURCE_CPL = [
-  { source: "99acres",     leads: 3, adSpend: 45_000, cpl: 15_000, conversions: 1, roi: "good" },
-  { source: "Facebook",    leads: 2, adSpend: 30_000, cpl: 15_000, conversions: 0, roi: "poor" },
-  { source: "Google",      leads: 1, adSpend: 25_000, cpl: 25_000, conversions: 0, roi: "poor" },
-  { source: "MagicBricks", leads: 1, adSpend: 20_000, cpl: 20_000, conversions: 0, roi: "avg"  },
-  { source: "Referral",    leads: 2, adSpend: 0,      cpl: 0,      conversions: 1, roi: "best" },
-];
-
-const EMPLOYEE_PERF = [
-  { name: "Riya Sharma",  role: "Sr. Agent",  leads: 28, converted: 9,  rate: 32, revenue: 2_10_00_000, feedback: 4.7, target: 12, avgDays: 18, visits: 21 },
-  { name: "Arjun Mehta",  role: "Agent",      leads: 22, converted: 6,  rate: 27, revenue: 1_45_00_000, feedback: 4.3, target: 10, avgDays: 24, visits: 15 },
-  { name: "Pooja Nair",   role: "Sr. Agent",  leads: 31, converted: 11, rate: 35, revenue: 2_80_00_000, feedback: 4.8, target: 12, avgDays: 14, visits: 26 },
-  { name: "Rahul Gupta",  role: "Agent",      leads: 18, converted: 4,  rate: 22, revenue: 95_00_000,   feedback: 4.1, target: 10, avgDays: 31, visits: 11 },
-  { name: "Sneha Joshi",  role: "Manager",    leads: 15, converted: 7,  rate: 47, revenue: 3_20_00_000, feedback: 4.9, target: 8,  avgDays: 11, visits: 12 },
-];
-
-const LOCATION_ROI = [
-  { location: "Bangalore", deals: 12, avgROI: 21, growth: "+18%" },
-  { location: "Pune",      deals: 8,  avgROI: 16, growth: "+12%" },
-  { location: "Gurugram",  deals: 5,  avgROI: 36, growth: "+24%" },
-  { location: "Mumbai",    deals: 3,  avgROI: 14, growth: "+8%"  },
-];
-
-const TODAY_VISITS = [
-  { lead: "Meera Patel",    project: "Prestige Lakeside", time: "10:00 AM", unit: "A-504", confirmed: true  },
-  { lead: "Sanjay Verma",   project: "Godrej Summit",     time: "12:30 PM", unit: "B-302", confirmed: true  },
-  { lead: "Deepa Krishnan", project: "Sobha Royal Crest", time: "3:00 PM",  unit: "B-405", confirmed: false },
-];
 
 const COLORS = ["#f59e0b", "#1e3a5f", "#10b981", "#8b5cf6", "#ef4444", "#3b82f6", "#f97316", "#06b6d4"];
 
 /* ─── TODAY'S FOCUS ───────────────────────────────────────────────────── */
 type TodayData = {
-  todayViewings: { id: number; time: string; status: string; leadName: string | null; propertyTitle: string | null; agentName: string | null }[];
+  todayViewings: { id: number; time: string; status: string; agentId: number | null; leadName: string | null; propertyTitle: string | null; agentName: string | null }[];
   overdueLeads:  { id: number; name: string; phone: string | null; source: string; createdAt: string }[];
   hotLeads:      { id: number; name: string; phone: string | null; source: string; score: number; status: string; budget: number | null }[];
 };
@@ -332,174 +236,214 @@ function TodaysFocusWidget() {
 }
 
 /* ─── INVENTORY ───────────────────────────────────────────────────────── */
+type InventoryProperty = {
+  id: number; title: string; city: string; type: string; status: string; price: number;
+  totalUnits: number; available: number; sold: number; booked: number; blocked: number;
+};
+type BlockedUnitDetail = {
+  id: number; unitNo: string; propertyId: number | null; propertyTitle: string | null;
+  buyerName: string | null; daysBlocked: number;
+};
+
 function InventoryTab() {
-  const [expandedProject, setExpandedProject] = useState<number | null>(null);
-  const [blockedUnits, setBlockedUnits] = useState([...BLOCKED_UNITS]);
+  const { token } = useAuth();
   const { toast } = useToast();
+  const qc = useQueryClient();
 
-  const totalUnits  = PROJECTS.reduce((s, p) => s + p.totalUnits, 0);
-  const totalSold   = PROJECTS.reduce((s, p) => s + p.sold, 0);
-  const totalAvail  = PROJECTS.reduce((s, p) => s + p.available, 0);
-  const totalIssues = PROJECTS.reduce((s, p) => s + p.issues, 0);
-  const pending     = PROJECTS.reduce((s, p) => s + p.pendingApprovals, 0);
+  const { data: invData, isLoading } = useQuery<{ properties: InventoryProperty[]; blockedUnits: BlockedUnitDetail[] }>({
+    queryKey: ["dashboard-inventory"],
+    queryFn: async () => {
+      const r = await fetch("/api/dashboard/inventory", { headers: { Authorization: `Bearer ${token}` } });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    },
+    enabled: !!token,
+    refetchInterval: 60_000,
+  });
 
-  function approveUnit(unit: string) {
-    setBlockedUnits((prev) => prev.filter((u) => u.unit !== unit));
-    toast({ title: `Unit ${unit} approved`, description: "Booking confirmed and moved to active pipeline." });
+  const projects = invData?.properties ?? [];
+  const blockedUnits = invData?.blockedUnits ?? [];
+
+  const totalUnits = projects.reduce((s, p) => s + p.totalUnits, 0);
+  const totalSold  = projects.reduce((s, p) => s + p.sold, 0);
+  const totalAvail = projects.reduce((s, p) => s + p.available, 0);
+  const totalBlocked = projects.reduce((s, p) => s + p.blocked + p.booked, 0);
+
+  async function approveUnit(unit: BlockedUnitDetail) {
+    try {
+      const r = await fetch(`/api/units/${unit.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ status: "booked" }),
+      });
+      if (!r.ok) throw new Error();
+      qc.invalidateQueries({ queryKey: ["dashboard-inventory"] });
+      toast({ title: `Unit ${unit.unitNo} approved`, description: "Booking confirmed and moved to active pipeline." });
+    } catch {
+      toast({ title: "Failed to approve unit", variant: "destructive" });
+    }
+  }
+  async function releaseUnit(unit: BlockedUnitDetail) {
+    try {
+      const r = await fetch(`/api/units/${unit.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ status: "available" }),
+      });
+      if (!r.ok) throw new Error();
+      qc.invalidateQueries({ queryKey: ["dashboard-inventory"] });
+      toast({ title: `Unit ${unit.unitNo} released`, description: "Unit is now available for re-booking.", variant: "destructive" });
+    } catch {
+      toast({ title: "Failed to release unit", variant: "destructive" });
+    }
   }
 
-  function releaseUnit(unit: string) {
-    setBlockedUnits((prev) => prev.filter((u) => u.unit !== unit));
-    toast({ title: `Unit ${unit} released`, description: "Unit is now available for re-booking.", variant: "destructive" });
-  }
+  if (isLoading) return <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">{[...Array(4)].map((_, i) => <div key={i} className="h-24 bg-muted rounded-xl animate-pulse" />)}</div>;
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
-        <KpiCard label="Total Inventory"   value={String(totalUnits)}  sub="across all projects" icon={Layers}        accent="border-l-blue-500"   trend="+12%" up />
-        <KpiCard label="Units Sold"        value={String(totalSold)}   sub={`${Math.round(totalSold/totalUnits*100)}% sell-through`} icon={CheckCircle2} accent="border-l-green-500" trend="+18%" up />
-        <KpiCard label="Available"         value={String(totalAvail)}  sub="ready to book"       icon={Home}          accent="border-l-amber-500"  />
-        <KpiCard label="Active Issues"     value={String(totalIssues)} sub="flagged by team"     icon={AlertTriangle} accent="border-l-red-500"    />
-        <KpiCard label="Pending Approvals" value={String(pending)}     sub="awaiting manager"    icon={ShieldCheck}   accent="border-l-purple-500" />
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <KpiCard label="Total Units"  value={String(totalUnits)} sub="across all properties" icon={Layers}        accent="border-l-blue-500"   />
+        <KpiCard label="Sold"         value={String(totalSold)}  sub={totalUnits > 0 ? `${Math.round(totalSold/totalUnits*100)}% sell-through` : "—"} icon={CheckCircle2} accent="border-l-green-500" />
+        <KpiCard label="Available"    value={String(totalAvail)} sub="ready to book"          icon={Home}          accent="border-l-amber-500"  />
+        <KpiCard label="Blocked/Booked" value={String(totalBlocked)} sub="pending conversion" icon={AlertTriangle} accent="border-l-red-500"    />
       </div>
 
       {/* Blocked Units Alert */}
       {blockedUnits.length > 0 && (
-      <Card className="border-amber-200 bg-amber-50/40 !p-4">
-        <SectionTitle icon={AlertTriangle} title="Blocked Units Alert" sub={`${blockedUnits.length} unit${blockedUnits.length !== 1 ? "s" : ""} blocked beyond 7-day threshold`} />
-        <div className="space-y-2">
-          {blockedUnits.map((u) => (
-            <div key={u.unit} className="flex flex-col sm:flex-row sm:items-center gap-3 bg-card rounded-lg px-3 py-3 border border-amber-100">
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center text-xs font-bold flex-shrink-0">{u.days}d</div>
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-foreground truncate">{u.unit} · {u.project}</p>
-                  <p className="text-xs text-muted-foreground">
-                    For <span className="font-medium text-foreground">{u.buyer}</span> · {u.salesperson} · Expected: {u.expected}
-                  </p>
+        <Card className="border-amber-200 bg-amber-50/40 !p-4">
+          <SectionTitle icon={AlertTriangle} title="Blocked Units Alert" sub={`${blockedUnits.length} unit${blockedUnits.length !== 1 ? "s" : ""} awaiting approval`} />
+          <div className="space-y-2">
+            {blockedUnits.map((u) => (
+              <div key={u.unitNo} className="flex flex-col sm:flex-row sm:items-center gap-3 bg-card rounded-lg px-3 py-3 border border-amber-100">
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center text-xs font-bold flex-shrink-0">{u.daysBlocked}d</div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-foreground truncate">{u.unitNo} · {u.propertyTitle ?? "—"}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {u.buyerName ? <>For <span className="font-medium text-foreground">{u.buyerName}</span></> : "No buyer linked"}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-2 flex-shrink-0 sm:ml-auto">
+                  <button onClick={() => approveUnit(u)} className="flex-1 sm:flex-none text-xs px-3 py-1.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors">Approve</button>
+                  <button onClick={() => releaseUnit(u)} className="flex-1 sm:flex-none text-xs px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-lg font-medium hover:bg-red-100 transition-colors">Release</button>
                 </div>
               </div>
-              <div className="flex gap-2 flex-shrink-0 sm:ml-auto">
-                <button onClick={() => approveUnit(u.unit)} className="flex-1 sm:flex-none text-xs px-3 py-1.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors">Approve</button>
-                <button onClick={() => releaseUnit(u.unit)} className="flex-1 sm:flex-none text-xs px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-lg font-medium hover:bg-red-100 transition-colors">Release</button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </Card>
+            ))}
+          </div>
+        </Card>
       )}
 
-      {/* Project cards */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {PROJECTS.map((p) => {
-          const sellPct = Math.round((p.sold / p.totalUnits) * 100);
-          const ms = MILESTONES[p.id] ?? [];
-          const isExpanded = expandedProject === p.id;
-          return (
-            <Card key={p.id} className="hover:shadow-md transition-shadow">
-              <div className="flex items-start justify-between gap-2 mb-3">
-                <div className="min-w-0">
-                  <h3 className="font-semibold text-foreground text-sm truncate">{p.name}</h3>
-                  <p className="text-xs text-muted-foreground truncate">{p.location} · {p.type}</p>
-                </div>
-                <div className="flex flex-wrap items-center gap-1 flex-shrink-0 justify-end">
-                  {p.issues > 0 && <span className="text-[10px] font-medium text-red-600 bg-red-50 px-1.5 py-0.5 rounded-full flex items-center gap-0.5 whitespace-nowrap"><AlertTriangle className="w-2.5 h-2.5" />{p.issues}</span>}
-                  {p.pendingApprovals > 0 && <span className="text-[10px] font-medium text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded-full flex items-center gap-0.5 whitespace-nowrap"><Clock className="w-2.5 h-2.5" />{p.pendingApprovals}</span>}
-                  <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap", p.status === "Ready to Move" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700")}>{p.status}</span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2 mb-3">
-                {[["Sold", p.sold, "text-green-600"], ["Available", p.available, "text-amber-600"], ["Review", p.underReview, "text-blue-600"]].map(([l, v, cls]) => (
-                  <div key={String(l)} className="text-center bg-muted/30 rounded-lg p-2">
-                    <p className={cn("text-base sm:text-lg font-bold", String(cls))}>{v}</p>
-                    <p className="text-[10px] text-muted-foreground">{l}</p>
+      {/* Property cards */}
+      {projects.length === 0 ? (
+        <Card><p className="text-sm text-muted-foreground text-center py-8">No properties found. Add properties to see inventory.</p></Card>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {projects.map((p) => {
+            const sellPct = p.totalUnits > 0 ? Math.round((p.sold / p.totalUnits) * 100) : 0;
+            const statusCls = p.status === "available" ? "bg-green-100 text-green-700"
+              : p.status === "sold" ? "bg-slate-100 text-slate-600"
+              : p.status === "under_offer" ? "bg-blue-100 text-blue-700"
+              : "bg-red-100 text-red-700";
+            return (
+              <Card key={p.id} className="hover:shadow-md transition-shadow">
+                <div className="flex items-start justify-between gap-2 mb-3">
+                  <div className="min-w-0">
+                    <h3 className="font-semibold text-foreground text-sm truncate">{p.title}</h3>
+                    <p className="text-xs text-muted-foreground truncate">{p.city} · {p.type}</p>
                   </div>
-                ))}
-              </div>
+                  <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0", statusCls)}>
+                    {p.status.replace(/_/g, " ")}
+                  </span>
+                </div>
 
-              <div className="space-y-2 mb-3">
-                {[
-                  { label: "Sell-through", pct: sellPct, detail: `${sellPct}% · ${p.sold}/${p.totalUnits}`, color: "bg-green-500" },
-                  { label: "Construction", pct: p.timeline, detail: `${p.timeline}% · Due ${p.completionDate}`, color: "bg-blue-500" },
-                ].map(({ label, pct, detail, color }) => (
-                  <div key={label}>
-                    <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
-                      <span>{label}</span><span className="font-semibold text-foreground">{detail}</span>
-                    </div>
-                    <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                      <div className={cn("h-full rounded-full transition-all", color)} style={{ width: `${pct}%` }} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <button onClick={() => setExpandedProject(isExpanded ? null : p.id)}
-                className="text-xs text-primary hover:underline flex items-center gap-1 mb-2">
-                {isExpanded ? "Hide" : "Show"} milestones
-                <ChevronRight className={cn("w-3 h-3 transition-transform", isExpanded && "rotate-90")} />
-              </button>
-
-              {isExpanded && (
-                <div className="space-y-1.5 py-2 border-t border-border">
-                  {ms.map((m, i) => (
-                    <div key={m.name} className="flex items-center gap-2">
-                      <div className={cn("w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0",
-                        m.done ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground")}>
-                        {m.done ? "✓" : i + 1}
-                      </div>
-                      <span className={cn("text-xs", m.done ? "text-foreground font-medium" : "text-muted-foreground")}>{m.name}</span>
-                      {m.delayed && <span className="text-[9px] bg-red-50 text-red-600 px-1 rounded flex items-center gap-0.5 ml-auto flex-shrink-0"><AlertTriangle className="w-2 h-2" />{m.reason ?? "Delayed"}</span>}
+                <div className="grid grid-cols-4 gap-2 mb-3">
+                  {[["Sold", p.sold, "text-green-600"], ["Available", p.available, "text-amber-600"], ["Booked", p.booked, "text-blue-600"], ["Blocked", p.blocked, "text-red-500"]].map(([l, v, cls]) => (
+                    <div key={String(l)} className="text-center bg-muted/30 rounded-lg p-2">
+                      <p className={cn("text-base sm:text-lg font-bold", String(cls))}>{v}</p>
+                      <p className="text-[10px] text-muted-foreground">{l}</p>
                     </div>
                   ))}
                 </div>
-              )}
 
-              <div className="mt-3 flex items-center justify-between text-[10px] sm:text-xs text-muted-foreground border-t border-border pt-3">
-                <span>₹{p.pricePerSqft.toLocaleString("en-IN")}/sqft · avg {p.avgSqft} sqft</span>
-                <span className="font-semibold text-foreground">{formatCurrency(p.pricePerSqft * p.avgSqft)}</span>
-              </div>
-            </Card>
-          );
-        })}
-      </div>
+                <div>
+                  <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
+                    <span>Sell-through</span>
+                    <span className="font-semibold text-foreground">{sellPct}% · {p.sold}/{p.totalUnits}</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                    <div className="h-full rounded-full bg-green-500 transition-all" style={{ width: `${sellPct}%` }} />
+                  </div>
+                </div>
+
+                <div className="mt-3 flex items-center justify-between text-[10px] sm:text-xs text-muted-foreground border-t border-border pt-3">
+                  <span>{p.totalUnits} total units</span>
+                  <span className="font-semibold text-foreground">{formatCurrency(p.price)}</span>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
 
-type PaymentEntry = { buyer: string; unit: string; project: string; dueDate: string; amount: number; days: number };
-type ProjectFinancial = { project: string; invested: number; collected: number; outstanding: number; expectedRevenue: number; margin: number };
+type ProjectFinancial = { project: string; propertyId: number; invested: number; collected: number; outstanding: number; expectedRevenue: number; margin: number };
 
 /* ─── CASH FLOW ───────────────────────────────────────────────────────── */
 function CashFlowTab({ editable = false }: { editable?: boolean }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
   const [priceAdj, setPriceAdj] = useState(0);
   const [costAdj, setCostAdj] = useState(0);
 
-  const [payments, setPayments] = useState<PaymentEntry[]>([...OVERDUE_COLLECTIONS]);
-  const [projects, setProjects] = useState<ProjectFinancial[]>([...CASH_FLOW]);
-  const [editingPayment, setEditingPayment] = useState<PaymentEntry | null>(null);
-  const [addingPayment, setAddingPayment] = useState(false);
+  const { data: dbProjects } = useQuery<ProjectFinancial[]>({
+    queryKey: ["project-financials"],
+    queryFn: () => customFetch<any[]>("/api/project-financials").then(rows =>
+      rows.map(r => ({
+        project: r.projectName,
+        propertyId: r.propertyId,
+        invested: Number(r.totalInvested),
+        collected: Number(r.totalCollected),
+        outstanding: Number(r.totalOutstanding),
+        expectedRevenue: Number(r.expectedRevenue),
+        margin: Number(r.margin),
+      }))
+    ),
+  });
+
+  const projects: ProjectFinancial[] = dbProjects ?? [];
+
   const [editingProject, setEditingProject] = useState<ProjectFinancial | null>(null);
-  const [newPmt, setNewPmt] = useState<Partial<PaymentEntry>>({});
-  const [editPmt, setEditPmt] = useState<Partial<PaymentEntry>>({});
   const [editProj, setEditProj] = useState<Partial<ProjectFinancial>>({});
 
-  function markPaid(buyer: string) {
-    setPayments(prev => prev.filter(p => p.buyer !== buyer));
-  }
-  function saveEditPayment() {
-    if (!editingPayment) return;
-    setPayments(prev => prev.map(p => p.buyer === editingPayment.buyer ? { ...editingPayment, ...editPmt } as PaymentEntry : p));
-    setEditingPayment(null); setEditPmt({});
-  }
-  function saveAddPayment() {
-    if (!newPmt.buyer || !newPmt.amount) return;
-    setPayments(prev => [...prev, { buyer: newPmt.buyer!, unit: newPmt.unit ?? "—", project: newPmt.project ?? "—", dueDate: newPmt.dueDate ?? "—", amount: Number(newPmt.amount), days: Number(newPmt.days ?? 0) }]);
-    setAddingPayment(false); setNewPmt({});
-  }
+  const saveProjectMutation = useMutation({
+    mutationFn: ({ propertyId, data }: { propertyId: number; data: Partial<ProjectFinancial> }) =>
+      customFetch(`/api/project-financials/${propertyId}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          projectName: data.project,
+          totalInvested: data.invested,
+          totalCollected: data.collected,
+          totalOutstanding: data.outstanding,
+          expectedRevenue: data.expectedRevenue,
+          margin: data.margin,
+        }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["project-financials"] });
+      toast({ title: "Project financials saved ✓" });
+    },
+    onError: () => toast({ title: "Failed to save", variant: "destructive" }),
+  });
+
   function saveEditProject() {
     if (!editingProject) return;
-    setProjects(prev => prev.map(p => p.project === editingProject.project ? { ...editingProject, ...editProj } as ProjectFinancial : p));
+    const merged = { ...editingProject, ...editProj } as ProjectFinancial;
+    if (!merged.propertyId) return;
+    saveProjectMutation.mutate({ propertyId: merged.propertyId, data: merged });
     setEditingProject(null); setEditProj({});
   }
 
@@ -508,9 +452,8 @@ function CashFlowTab({ editable = false }: { editable?: boolean }) {
     collected:   projects.reduce((s, c) => s + c.collected, 0),
     outstanding: projects.reduce((s, c) => s + c.outstanding, 0),
     expected:    projects.reduce((s, c) => s + c.expectedRevenue, 0),
-    overdue:     payments.reduce((s, c) => s + c.amount, 0),
     avgMargin:   projects.length > 0 ? projects.reduce((s, c) => s + c.margin, 0) / projects.length : 0,
-  }), [projects, payments]);
+  }), [projects]);
 
   const baseProfit     = totals.expected - totals.invested;
   const scenarioProfit = (totals.expected * (1 + priceAdj / 100)) - (totals.invested * (1 + costAdj / 100));
@@ -518,159 +461,12 @@ function CashFlowTab({ editable = false }: { editable?: boolean }) {
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <KpiCard label="Total Invested"   value={formatCurrency(totals.invested)}    sub="across all projects" icon={DollarSign}    accent="border-l-blue-500"    />
-        <KpiCard label="Collected"        value={formatCurrency(totals.collected)}   sub={`${Math.round(totals.collected/totals.invested*100)}% of invested`} icon={TrendingUp} accent="border-l-green-500" trend="+23%" up />
+        <KpiCard label="Collected"        value={formatCurrency(totals.collected)}   sub={totals.invested > 0 ? `${Math.round(totals.collected/totals.invested*100)}% of invested` : "—"} icon={TrendingUp} accent="border-l-green-500" />
         <KpiCard label="Outstanding"      value={formatCurrency(totals.outstanding)} sub="yet to collect"      icon={Clock}         accent="border-l-amber-500"   />
-        <KpiCard label="Overdue"          value={formatCurrency(totals.overdue)}     sub={`${OVERDUE_COLLECTIONS.length} instalments`} icon={AlertTriangle} accent="border-l-red-500" />
-        <KpiCard label="Avg Margin"       value={`${totals.avgMargin.toFixed(1)}%`}  sub="blended profit"      icon={Target}        accent="border-l-emerald-500" trend="+3.2%" up />
+        <KpiCard label="Avg Margin"       value={`${totals.avgMargin.toFixed(1)}%`}  sub="blended profit"      icon={Target}        accent="border-l-emerald-500" />
       </div>
-
-      {/* Overdue collections */}
-      <Card className="border-red-200 bg-red-50/20">
-        <SectionTitle icon={AlertTriangle} title="Overdue Instalments" sub="Buyers with missed payment deadlines"
-          action={editable ? (
-            <button onClick={() => { setNewPmt({}); setAddingPayment(true); }}
-              className="flex items-center gap-1 text-xs px-2.5 py-1.5 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 transition-opacity whitespace-nowrap">
-              <Plus className="w-3 h-3" />Add Entry
-            </button>
-          ) : undefined}
-        />
-        {payments.length === 0 ? (
-          <div className="py-6 text-center text-sm text-muted-foreground">No overdue instalments — all caught up!</div>
-        ) : (
-          <ScrollTable minWidth={editable ? 560 : 480}>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border">
-                  {["Buyer", "Unit / Project", "Due Date", "Amount", "Overdue", ...(editable ? ["Actions"] : [])].map(h => (
-                    <th key={h} className="text-left pb-2 text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider pr-3 whitespace-nowrap">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {payments.map((c) => (
-                  <tr key={c.buyer} className="hover:bg-muted/20">
-                    <td className="py-2.5 pr-3 font-medium text-foreground whitespace-nowrap text-sm">{c.buyer}</td>
-                    <td className="py-2.5 pr-3 text-xs">
-                      <span className="font-medium text-foreground">{c.unit}</span>
-                      <span className="text-muted-foreground"> · {c.project}</span>
-                    </td>
-                    <td className="py-2.5 pr-3 text-xs text-muted-foreground whitespace-nowrap">{c.dueDate}</td>
-                    <td className="py-2.5 pr-3 font-semibold text-sm whitespace-nowrap">{formatCurrency(c.amount)}</td>
-                    <td className="py-2.5 pr-3">
-                      <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap",
-                        c.days > 15 ? "bg-red-100 text-red-700" : c.days > 7 ? "bg-amber-100 text-amber-700" : "bg-yellow-100 text-yellow-700")}>
-                        {c.days}d
-                      </span>
-                    </td>
-                    {editable && (
-                      <td className="py-2.5">
-                        <div className="flex items-center gap-1">
-                          <button onClick={() => { setEditingPayment(c); setEditPmt({ ...c }); }}
-                            className="p-1 rounded hover:bg-blue-50 text-blue-600 transition-colors" title="Edit">
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
-                          <button onClick={() => markPaid(c.buyer)}
-                            className="p-1 rounded hover:bg-green-50 text-green-600 transition-colors" title="Mark as Paid">
-                            <CheckCheck className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </ScrollTable>
-        )}
-        <p className="mt-3 text-xs text-muted-foreground flex items-start gap-1">
-          <Zap className="w-3 h-3 text-red-500 flex-shrink-0 mt-0.5" />
-          Total overdue: <span className="font-semibold text-red-600 ml-0.5">{formatCurrency(totals.overdue)}</span>
-          <span className="hidden sm:inline"> — legal notice recommended for 15+ day cases</span>
-        </p>
-      </Card>
-
-      {/* Edit Payment Modal */}
-      {editingPayment && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="bg-card rounded-xl border border-border shadow-xl w-full max-w-sm p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-foreground">Edit Payment Entry</h3>
-              <button onClick={() => { setEditingPayment(null); setEditPmt({}); }} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
-            </div>
-            {([
-              { label: "Buyer Name", key: "buyer", type: "text" },
-              { label: "Unit", key: "unit", type: "text" },
-              { label: "Project", key: "project", type: "text" },
-              { label: "Due Date", key: "dueDate", type: "text" },
-              { label: "Amount (₹)", key: "amount", type: "number" },
-              { label: "Days Overdue", key: "days", type: "number" },
-            ] as const).map(({ label, key, type }) => (
-              <div key={key}>
-                <label className="text-xs font-medium text-muted-foreground block mb-1">{label}</label>
-                <input type={type} value={String((editPmt as Record<string, unknown>)[key] ?? "")}
-                  onChange={e => setEditPmt(p => ({ ...p, [key]: type === "number" ? Number(e.target.value) : e.target.value }))}
-                  className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/30" />
-              </div>
-            ))}
-            <div className="flex gap-2 pt-1">
-              <button onClick={saveEditPayment} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">Save</button>
-              <button onClick={() => { setEditingPayment(null); setEditPmt({}); }} className="flex-1 py-2 border border-border rounded-lg text-sm font-medium hover:bg-muted/50 transition-colors">Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Add Payment Modal */}
-      {addingPayment && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="bg-card rounded-xl border border-border shadow-xl w-full max-w-sm p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-foreground">Add Payment Entry</h3>
-              <button onClick={() => { setAddingPayment(false); setNewPmt({}); }} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
-            </div>
-            {([
-              { label: "Buyer Name *", key: "buyer", type: "text" },
-              { label: "Unit", key: "unit", type: "text" },
-              { label: "Project", key: "project", type: "text" },
-              { label: "Due Date", key: "dueDate", type: "text", placeholder: "e.g. May 15" },
-              { label: "Amount (₹) *", key: "amount", type: "number" },
-              { label: "Days Overdue", key: "days", type: "number" },
-            ] as const).map(({ label, key, type, placeholder }: { label: string; key: string; type: string; placeholder?: string }) => (
-              <div key={key}>
-                <label className="text-xs font-medium text-muted-foreground block mb-1">{label}</label>
-                <input type={type} placeholder={placeholder ?? ""} value={String((newPmt as Record<string, unknown>)[key] ?? "")}
-                  onChange={e => setNewPmt(p => ({ ...p, [key]: type === "number" ? Number(e.target.value) : e.target.value }))}
-                  className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/30" />
-              </div>
-            ))}
-            <div className="flex gap-2 pt-1">
-              <button onClick={saveAddPayment} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">Add</button>
-              <button onClick={() => { setAddingPayment(false); setNewPmt({}); }} className="flex-1 py-2 border border-border rounded-lg text-sm font-medium hover:bg-muted/50 transition-colors">Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Monthly chart */}
-      <Card>
-        <SectionTitle icon={BarChart3} title="Monthly Cash Flow" sub="Inflow vs outflow (₹ lakhs) — FY 2025–26" />
-        <ResponsiveContainer width="100%" height={180}>
-          <BarChart data={MONTHLY_CF} barGap={4} barSize={12}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" />
-            <XAxis dataKey="month" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fontSize: 10 }} axisLine={false} tickLine={false} unit="L" width={36} />
-            <Tooltip formatter={(v: number) => [`₹${v}L`]} />
-            <Bar dataKey="inflow"  fill="#22c55e" radius={[4,4,0,0]} name="Inflow" />
-            <Bar dataKey="outflow" fill="#f59e0b" radius={[4,4,0,0]} name="Outflow" />
-          </BarChart>
-        </ResponsiveContainer>
-        <div className="flex gap-4 mt-1 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-green-500 inline-block flex-shrink-0" />Inflow</span>
-          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-amber-500 inline-block flex-shrink-0" />Outflow</span>
-        </div>
-      </Card>
 
       {/* Project table */}
       <Card>
@@ -794,13 +590,68 @@ function CashFlowTab({ editable = false }: { editable?: boolean }) {
   );
 }
 
+type LostReason = { reason: string; count: number; pct: number; color: string };
+
+/* ─── LOST LEAD ANALYSIS CARD (shared between tabs) ─────────────────────── */
+function LostLeadAnalysisCard() {
+  const { token } = useAuth();
+  const { data: lostReasons = [] } = useQuery<LostReason[]>({
+    queryKey: ["dashboard-lost-reasons"],
+    queryFn: async () => {
+      const r = await fetch("/api/dashboard/lost-reasons", { headers: { Authorization: `Bearer ${token}` } });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    },
+    enabled: !!token,
+    refetchInterval: 120_000,
+  });
+
+  const topReason = lostReasons[0];
+
+  return (
+    <Card>
+      <SectionTitle icon={XCircle} title="Lost Lead Analysis" sub="Why are leads not converting?" />
+      {lostReasons.length === 0 ? (
+        <p className="text-sm text-muted-foreground py-4 text-center">
+          No lost lead data yet — reasons are captured when leads are marked lost.
+        </p>
+      ) : (
+        <>
+          <div className="space-y-2.5">
+            {lostReasons.map((r) => (
+              <div key={r.reason}>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-medium text-foreground">{r.reason}</span>
+                  <span className="text-xs text-muted-foreground">{r.count} · {r.pct}%</span>
+                </div>
+                <div className="h-2 rounded-full bg-muted overflow-hidden">
+                  <div className="h-full rounded-full" style={{ width: `${r.pct}%`, background: r.color }} />
+                </div>
+              </div>
+            ))}
+          </div>
+          {topReason && (
+            <p className="mt-4 text-xs text-muted-foreground flex items-start gap-1">
+              <Zap className="w-3 h-3 text-amber-500 flex-shrink-0 mt-0.5" />
+              {topReason.pct}% lost to "{topReason.reason}" — consider addressing this as a priority.
+            </p>
+          )}
+        </>
+      )}
+    </Card>
+  );
+}
+
 /* ─── LEAD MANAGEMENT ─────────────────────────────────────────────────── */
+type AdSpendRecord = { id: number; channel: string; month: number; year: number; spend: number; leadsGenerated: number; cpl: number | null };
+
 function LeadManagementTab({ stats, sources, pipeline, activity }: {
   stats: DashboardStats | undefined;
   sources: LeadSource[] | undefined;
   pipeline: PipelineStage[] | undefined;
   activity: ActivityItem[] | undefined;
 }) {
+  const { token } = useAuth();
   const { data: allLeads } = useGetLeads({}, { query: { queryKey: getGetLeadsQueryKey({}) } });
   const leadList = allLeads ?? [];
   const stageOrder = ["new","contacted","qualified","proposal","negotiation","closed_won","closed_lost"];
@@ -809,13 +660,24 @@ function LeadManagementTab({ stats, sources, pipeline, activity }: {
   const sourceTotal = (sources ?? []).reduce((s, x) => s + x.count, 0);
   const staleLeads  = leadList.filter(l => ["new","contacted"].includes(l.status)).slice(0, 5);
 
+  const { data: adSpend = [] } = useQuery<AdSpendRecord[]>({
+    queryKey: ["ad-spend"],
+    queryFn: async () => {
+      const r = await fetch("/api/ad-spend", { headers: { Authorization: `Bearer ${token}` } });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    },
+    enabled: !!token,
+    refetchInterval: 300_000,
+  });
+
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <KpiCard label="Total Leads"    value={String(stats?.totalLeads ?? 0)}     sub={`+${stats?.newLeadsThisMonth ?? 0} this month`} icon={Users}       accent="border-l-blue-500"   trend="+8%" up />
-        <KpiCard label="Converted"      value={String(leadList.filter(l=>l.status==="closed_won").length)} sub="became customers" icon={UserCheck} accent="border-l-green-500" trend="+21%" up />
+        <KpiCard label="Total Leads"    value={String(stats?.totalLeads ?? 0)}     sub={`+${stats?.newLeadsThisMonth ?? 0} this month`} icon={Users}       accent="border-l-blue-500"   />
+        <KpiCard label="Converted"      value={String(leadList.filter(l=>l.status==="closed_won").length)} sub="became customers" icon={UserCheck} accent="border-l-green-500" />
         <KpiCard label="In Progress"    value={String(leadList.filter(l=>!["closed_won","closed_lost"].includes(l.status)).length)} sub="active pipeline" icon={GitBranch} accent="border-l-amber-500" />
-        <KpiCard label="Conv. Rate"     value={`${stats?.conversionRate ?? 0}%`}   sub="lead → closed won" icon={Target}      accent="border-l-purple-500" trend="+3%" up />
+        <KpiCard label="Conv. Rate"     value={`${stats?.conversionRate ?? 0}%`}   sub="lead → closed won" icon={Target}      accent="border-l-purple-500" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -864,35 +726,40 @@ function LeadManagementTab({ stats, sources, pipeline, activity }: {
 
       {/* Cost per lead */}
       <Card>
-        <SectionTitle icon={DollarSign} title="Cost Per Lead by Channel" sub="Where is your marketing budget working hardest?" />
-        <ScrollTable minWidth={460}>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border">
-                {["Channel", "Leads", "Ad Spend", "CPL", "Converted", "ROI"].map(h => (
-                  <th key={h} className="text-left pb-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider pr-3 whitespace-nowrap">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {SOURCE_CPL.map((s) => (
-                <tr key={s.source} className="hover:bg-muted/20">
-                  <td className="py-2.5 pr-3 font-medium text-foreground text-sm">{s.source}</td>
-                  <td className="py-2.5 pr-3 text-muted-foreground text-sm">{s.leads}</td>
-                  <td className="py-2.5 pr-3 text-muted-foreground text-xs whitespace-nowrap">{s.adSpend > 0 ? `₹${(s.adSpend/1000).toFixed(0)}k` : "—"}</td>
-                  <td className="py-2.5 pr-3 font-medium text-sm whitespace-nowrap">{s.cpl > 0 ? `₹${(s.cpl/1000).toFixed(0)}k` : "Organic"}</td>
-                  <td className="py-2.5 pr-3 text-sm">{s.conversions}</td>
-                  <td className="py-2.5">
-                    <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap",
-                      s.roi === "best" ? "bg-green-100 text-green-700" : s.roi === "good" ? "bg-blue-100 text-blue-700" : s.roi === "avg" ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700")}>
-                      {s.roi === "best" ? "Best" : s.roi === "good" ? "Good" : s.roi === "avg" ? "Avg" : "Poor"}
-                    </span>
-                  </td>
+        <SectionTitle icon={DollarSign} title="Cost Per Lead by Channel"
+          sub="Enter monthly ad spend below to compute real CPL"
+          action={<span className="text-xs text-muted-foreground">Owner can edit spend in Settings</span>}
+        />
+        {adSpend.length === 0 ? (
+          <div className="py-6 text-center">
+            <p className="text-sm text-muted-foreground">No ad spend data yet. Add monthly spend per channel to compute real CPL.</p>
+          </div>
+        ) : (
+          <ScrollTable minWidth={460}>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  {["Channel", "Month", "Ad Spend", "Leads", "CPL"].map(h => (
+                    <th key={h} className="text-left pb-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider pr-3 whitespace-nowrap">{h}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </ScrollTable>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {adSpend.map((s) => (
+                  <tr key={s.id} className="hover:bg-muted/20">
+                    <td className="py-2.5 pr-3 font-medium text-foreground text-sm capitalize">{s.channel}</td>
+                    <td className="py-2.5 pr-3 text-muted-foreground text-xs">{new Date(s.year, s.month - 1).toLocaleString("en-IN", { month: "short", year: "2-digit" })}</td>
+                    <td className="py-2.5 pr-3 text-muted-foreground text-xs whitespace-nowrap">₹{(s.spend/1000).toFixed(0)}k</td>
+                    <td className="py-2.5 pr-3 text-sm">{s.leadsGenerated}</td>
+                    <td className="py-2.5 font-medium text-sm whitespace-nowrap">
+                      {s.cpl != null ? `₹${(s.cpl/1000).toFixed(1)}k` : <span className="text-muted-foreground">—</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </ScrollTable>
+        )}
       </Card>
 
       {/* Follow-up compliance */}
@@ -917,26 +784,7 @@ function LeadManagementTab({ stats, sources, pipeline, activity }: {
       )}
 
       {/* Lost lead analysis */}
-      <Card>
-        <SectionTitle icon={XCircle} title="Lost Lead Analysis" sub="Why are leads not converting?" />
-        <div className="space-y-2.5">
-          {LOST_REASONS.map((r) => (
-            <div key={r.reason}>
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs font-medium text-foreground">{r.reason}</span>
-                <span className="text-xs text-muted-foreground">{r.count} · {r.pct}%</span>
-              </div>
-              <div className="h-2 rounded-full bg-muted overflow-hidden">
-                <div className="h-full rounded-full" style={{ width: `${r.pct}%`, background: r.color }} />
-              </div>
-            </div>
-          ))}
-        </div>
-        <p className="mt-4 text-xs text-muted-foreground flex items-start gap-1">
-          <Zap className="w-3 h-3 text-amber-500 flex-shrink-0 mt-0.5" />
-          35% lost to budget — consider a more affordable configuration or flexible payment plan.
-        </p>
-      </Card>
+      <LostLeadAnalysisCard />
 
       {/* Pipeline chart */}
       <Card>
@@ -956,102 +804,303 @@ function LeadManagementTab({ stats, sources, pipeline, activity }: {
 }
 
 /* ─── ANALYSIS ────────────────────────────────────────────────────────── */
+type AgentPerf = {
+  id: number; name: string; email: string; role: string;
+  leadsThisMonth: number; bookingsThisMonth: number; revenueThisMonth: number; visitsThisMonth: number;
+};
+type LocationRoi = { location: string; deals: number; avgROI: number };
+
 function AnalysisTab() {
+  const { token } = useAuth();
+
+  const { data: agentPerf = [] } = useQuery<AgentPerf[]>({
+    queryKey: ["dashboard-agents-performance"],
+    queryFn: async () => {
+      const r = await fetch("/api/dashboard/agents-performance", { headers: { Authorization: `Bearer ${token}` } });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    },
+    enabled: !!token,
+    refetchInterval: 60_000,
+  });
+
+  const { data: lostReasons = [] } = useQuery<LostReason[]>({
+    queryKey: ["dashboard-lost-reasons"],
+    queryFn: async () => {
+      const r = await fetch("/api/dashboard/lost-reasons", { headers: { Authorization: `Bearer ${token}` } });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    },
+    enabled: !!token,
+    refetchInterval: 120_000,
+  });
+
+  const { data: locationRoi = [] } = useQuery<LocationRoi[]>({
+    queryKey: ["dashboard-location-roi"],
+    queryFn: async () => {
+      const r = await fetch("/api/dashboard/location-roi", { headers: { Authorization: `Bearer ${token}` } });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    },
+    enabled: !!token,
+    refetchInterval: 120_000,
+  });
+
+  type DemandIntelligence = {
+    bhkDemand: { type: string; count: number }[];
+    budgetDemand: { range: string; count: number }[];
+    topObjections: { reason: string; count: number }[];
+    totalActiveLeads: number;
+  };
+  const { data: demandData } = useQuery<DemandIntelligence>({
+    queryKey: ["dashboard-demand-intelligence"],
+    queryFn: async () => {
+      const r = await fetch("/api/dashboard/demand-intelligence", { headers: { Authorization: `Bearer ${token}` } });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    },
+    enabled: !!token,
+    refetchInterval: 120_000,
+  });
+
+  type VisitConversion = {
+    totalVisitsScheduled: number; completedVisits: number; bookingsFromVisits: number;
+    conversionRate: number;
+    byAgent: { agentId: number; agentName: string; visits: number; completed: number; conversionRate: number }[];
+  };
+  const { data: visitConv } = useQuery<VisitConversion>({
+    queryKey: ["dashboard-visit-conversion"],
+    queryFn: async () => {
+      const r = await fetch("/api/dashboard/visit-conversion", { headers: { Authorization: `Bearer ${token}` } });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    },
+    enabled: !!token,
+    refetchInterval: 120_000,
+  });
+
+  const TARGET_BOOKINGS = 4;
+
   return (
     <div className="space-y-5">
       <Card>
-        <SectionTitle icon={UserCheck} title="Sales Team Performance" sub="Leads, conversions, revenue and time to close" />
-        <ScrollTable minWidth={600}>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border">
-                {["Employee","Leads","Conv.","Rate","Revenue","Avg Days","Visits","vs Target"].map(h => (
-                  <th key={h} className="text-left pb-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider pr-3 whitespace-nowrap">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {EMPLOYEE_PERF.map((e) => {
-                const delta = e.converted - e.target;
-                return (
-                  <tr key={e.name} className="hover:bg-muted/20">
-                    <td className="py-2.5 pr-3">
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[9px] font-bold flex-shrink-0">
-                          {e.name.split(" ").map(w=>w[0]).join("")}
-                        </div>
-                        <div className="min-w-0">
+        <SectionTitle icon={UserCheck} title="Sales Team Performance" sub={`This month — leads assigned, bookings, and revenue`} />
+        {agentPerf.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-4 text-center">No agent data for this month yet.</p>
+        ) : (
+          <ScrollTable minWidth={580}>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  {["Team Member","Role","Leads","Bookings","Revenue","Site Visits","vs Target"].map(h => (
+                    <th key={h} className="text-left pb-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider pr-3 whitespace-nowrap">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {agentPerf.map((e) => {
+                  const delta = e.bookingsThisMonth - TARGET_BOOKINGS;
+                  const rate = e.leadsThisMonth > 0 ? Math.round((e.bookingsThisMonth / e.leadsThisMonth) * 100) : 0;
+                  return (
+                    <tr key={e.id} className="hover:bg-muted/20">
+                      <td className="py-2.5 pr-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[9px] font-bold flex-shrink-0">
+                            {e.name.split(" ").map(w=>w[0]).join("")}
+                          </div>
                           <p className="font-medium text-foreground text-xs whitespace-nowrap">{e.name}</p>
-                          <p className="text-[10px] text-muted-foreground">{e.role}</p>
                         </div>
-                      </div>
-                    </td>
-                    <td className="py-2.5 pr-3 text-sm">{e.leads}</td>
-                    <td className="py-2.5 pr-3 text-green-600 font-medium text-sm">{e.converted}</td>
-                    <td className="py-2.5 pr-3">
-                      <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap",
-                        e.rate >= 35 ? "bg-green-100 text-green-700" : e.rate >= 25 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700")}>{e.rate}%</span>
-                    </td>
-                    <td className="py-2.5 pr-3 font-semibold text-xs whitespace-nowrap">{formatCurrency(e.revenue)}</td>
-                    <td className="py-2.5 pr-3">
-                      <span className={cn("text-xs font-medium whitespace-nowrap",
-                        e.avgDays <= 15 ? "text-green-600" : e.avgDays <= 25 ? "text-amber-600" : "text-red-600")}>{e.avgDays}d</span>
-                    </td>
-                    <td className="py-2.5 pr-3 text-muted-foreground text-sm">{e.visits}</td>
-                    <td className="py-2.5">
-                      <span className={cn("flex items-center gap-0.5 text-xs font-semibold whitespace-nowrap",
-                        delta >= 0 ? "text-green-600" : "text-red-600")}>
-                        {delta >= 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-                        {delta >= 0 ? `+${delta}` : delta}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </ScrollTable>
+                      </td>
+                      <td className="py-2.5 pr-3 text-[10px] text-muted-foreground capitalize whitespace-nowrap">{e.role}</td>
+                      <td className="py-2.5 pr-3 text-sm">{e.leadsThisMonth}</td>
+                      <td className="py-2.5 pr-3">
+                        <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap",
+                          rate >= 35 ? "bg-green-100 text-green-700" : rate >= 20 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700")}>
+                          {e.bookingsThisMonth} ({rate}%)
+                        </span>
+                      </td>
+                      <td className="py-2.5 pr-3 font-semibold text-xs whitespace-nowrap">{formatCurrency(e.revenueThisMonth)}</td>
+                      <td className="py-2.5 pr-3 text-muted-foreground text-sm">{e.visitsThisMonth}</td>
+                      <td className="py-2.5">
+                        <span className={cn("flex items-center gap-0.5 text-xs font-semibold whitespace-nowrap",
+                          delta >= 0 ? "text-green-600" : "text-red-600")}>
+                          {delta >= 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+                          {delta >= 0 ? `+${delta}` : delta}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </ScrollTable>
+        )}
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card>
           <SectionTitle icon={XCircle} title="Lost Lead Reasons" sub="Top reasons deals don't close" />
-          <div className="space-y-3">
-            {LOST_REASONS.map((r) => (
-              <div key={r.reason} className="flex items-center gap-3">
-                <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: r.color }} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex justify-between mb-0.5">
-                    <span className="text-xs font-medium text-foreground truncate mr-2">{r.reason}</span>
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">{r.count} · {r.pct}%</span>
-                  </div>
-                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                    <div className="h-full rounded-full" style={{ width: `${r.pct}%`, background: r.color }} />
+          {lostReasons.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4 text-center">No lost lead data yet — reasons are captured when leads are marked lost.</p>
+          ) : (
+            <div className="space-y-3">
+              {lostReasons.map((r) => (
+                <div key={r.reason} className="flex items-center gap-3">
+                  <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: r.color }} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between mb-0.5">
+                      <span className="text-xs font-medium text-foreground truncate mr-2">{r.reason}</span>
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">{r.count} · {r.pct}%</span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                      <div className="h-full rounded-full" style={{ width: `${r.pct}%`, background: r.color }} />
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </Card>
 
         <Card>
-          <SectionTitle icon={Building2} title="Growth by Location" sub="Deal activity and ROI by city" />
-          <div className="space-y-2.5">
-            {LOCATION_ROI.map((l, i) => (
-              <div key={l.location} className="flex items-center gap-3 p-2.5 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold text-white flex-shrink-0" style={{ background: COLORS[i] }}>
-                  {l.location.slice(0,2).toUpperCase()}
+          <SectionTitle icon={Building2} title="Growth by Location" sub="Deal activity and ROI by city (closed won)" />
+          {locationRoi.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4 text-center">No closed deals with linked properties yet.</p>
+          ) : (
+            <div className="space-y-2.5">
+              {locationRoi.map((l, i) => (
+                <div key={l.location} className="flex items-center gap-3 p-2.5 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold text-white flex-shrink-0" style={{ background: COLORS[i] }}>
+                    {l.location.slice(0,2).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-foreground">{l.location}</p>
+                    <p className="text-xs text-muted-foreground">{l.deals} deal{l.deals !== 1 ? "s" : ""} · {l.avgROI}% ROI</p>
+                  </div>
+                  <span className={cn("text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0 whitespace-nowrap",
+                    l.avgROI > 0 ? "text-green-600 bg-green-50" : "text-red-600 bg-red-50")}>
+                    {l.avgROI >= 0 ? "+" : ""}{l.avgROI}%
+                  </span>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-foreground">{l.location}</p>
-                  <p className="text-xs text-muted-foreground">{l.deals} deals · {l.avgROI}% ROI</p>
-                </div>
-                <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-full flex-shrink-0 whitespace-nowrap">{l.growth}</span>
+              ))}
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {/* Demand Intelligence */}
+      {demandData && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <Card>
+            <SectionTitle icon={BarChart3} title="BHK Demand" sub={`From ${demandData.totalActiveLeads} active leads`} />
+            {demandData.bhkDemand.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">No property type data yet.</p>
+            ) : (
+              <div className="space-y-2.5">
+                {demandData.bhkDemand.map((d, i) => {
+                  const maxCount = demandData.bhkDemand[0].count;
+                  const pct = maxCount > 0 ? Math.round((d.count / maxCount) * 100) : 0;
+                  return (
+                    <div key={d.type}>
+                      <div className="flex justify-between mb-1 text-xs">
+                        <span className="font-medium text-foreground">{d.type}</span>
+                        <span className="text-muted-foreground">{d.count} leads</span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: COLORS[i % COLORS.length] }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Card>
+          <Card>
+            <SectionTitle icon={DollarSign} title="Budget Distribution" sub="Active leads by budget range" />
+            {demandData.budgetDemand.every(b => b.count === 0) ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">No budget data recorded yet.</p>
+            ) : (
+              <div className="space-y-2.5">
+                {demandData.budgetDemand.filter(b => b.count > 0).map((b, i) => {
+                  const maxCount = Math.max(...demandData.budgetDemand.map(x => x.count));
+                  const pct = maxCount > 0 ? Math.round((b.count / maxCount) * 100) : 0;
+                  return (
+                    <div key={b.range}>
+                      <div className="flex justify-between mb-1 text-xs">
+                        <span className="font-medium text-foreground">{b.range}</span>
+                        <span className="text-muted-foreground">{b.count} leads</span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: COLORS[(i + 2) % COLORS.length] }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Card>
+          <Card>
+            <SectionTitle icon={XCircle} title="Top Objections" sub="Why leads go cold" />
+            {demandData.topObjections.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">No objection data yet — captures from lost leads.</p>
+            ) : (
+              <div className="space-y-2">
+                {demandData.topObjections.map((o, i) => (
+                  <div key={o.reason} className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-muted-foreground w-4">{i + 1}</span>
+                    <span className="flex-1 text-xs text-foreground">{o.reason}</span>
+                    <span className="text-xs font-semibold text-foreground">{o.count}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        </div>
+      )}
+
+      {/* Visit → Booking Conversion */}
+      {visitConv && (
+        <Card>
+          <SectionTitle icon={TrendingUp} title="Site Visit → Booking Conversion" sub="Last 30 days — the most important metric in real estate sales" />
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+            {[
+              { label: "Visits Scheduled", value: visitConv.totalVisitsScheduled, cls: "text-blue-600" },
+              { label: "Completed", value: visitConv.completedVisits, cls: "text-amber-600" },
+              { label: "Bookings", value: visitConv.bookingsFromVisits, cls: "text-green-600" },
+              { label: "Conversion Rate", value: `${visitConv.conversionRate}%`, cls: visitConv.conversionRate >= 30 ? "text-green-600" : visitConv.conversionRate >= 15 ? "text-amber-600" : "text-red-600" },
+            ].map(({ label, value, cls }) => (
+              <div key={label} className="bg-muted/30 rounded-lg p-3 text-center">
+                <p className={cn("text-2xl font-bold", cls)}>{value}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
               </div>
             ))}
           </div>
+          {visitConv.conversionRate < 15 && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 text-xs text-red-700">
+              <strong>Below target:</strong> Conversion rate under 15% signals follow-up gaps or property-lead mismatches. Review agent follow-up speed post-visit.
+            </div>
+          )}
+          {visitConv.byAgent.length > 0 && (
+            <ScrollTable minWidth={420}>
+              <table className="w-full text-sm">
+                <thead><tr className="border-b border-border text-[10px] font-semibold text-muted-foreground uppercase">
+                  <th className="text-left pb-2">Agent</th><th className="text-left pb-2">Visits</th><th className="text-left pb-2">Completed</th><th className="text-left pb-2">Rate</th>
+                </tr></thead>
+                <tbody className="divide-y divide-border">
+                  {visitConv.byAgent.map(a => (
+                    <tr key={a.agentId} className="hover:bg-muted/20">
+                      <td className="py-2 text-sm font-medium">{a.agentName}</td>
+                      <td className="py-2 text-sm">{a.visits}</td>
+                      <td className="py-2 text-sm">{a.completed}</td>
+                      <td className="py-2"><span className={cn("text-xs font-semibold px-1.5 py-0.5 rounded", a.conversionRate >= 30 ? "bg-green-100 text-green-700" : a.conversionRate >= 15 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700")}>{a.conversionRate}%</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </ScrollTable>
+          )}
         </Card>
-      </div>
+      )}
     </div>
   );
 }
@@ -1132,8 +1181,6 @@ function QuickLeadDialog({ open, onClose }: { open: boolean; onClose: () => void
 }
 
 /* ─── EMPLOYEE DASHBOARD ──────────────────────────────────────────────── */
-const TEAM_FILTERS = ["D1", "D2", "D3", "D4", "D5"];
-
 function getGreeting(name: string) {
   const h = new Date().getHours();
   const tod = h < 12 ? "Morning" : h < 17 ? "Afternoon" : "Evening";
@@ -1144,13 +1191,28 @@ function EmployeeDashboard({ activity }: {
   activity: ActivityItem[] | undefined;
 }) {
   const [quickLeadOpen, setQuickLeadOpen] = useState(false);
-  const [teamFilter, setTeamFilter] = useState<string | null>(null);
   const { profile } = useRole();
-  const { data: agents }   = useGetAgents();
+  const { user, token } = useAuth();
   const { data: allLeads } = useGetLeads({}, { query: { queryKey: getGetLeadsQueryKey({}) } });
 
-  const me           = agents?.[0];
-  const myLeads      = useMemo(() => (allLeads ?? []).filter(l => l.assignedTo === me?.id), [allLeads, me]);
+  const myAgentId = user?.agentId ?? null;
+  const myLeads   = useMemo(() => (allLeads ?? []).filter(l => l.assignedTo === myAgentId), [allLeads, myAgentId]);
+
+  const { data: todayData } = useQuery<TodayData>({
+    queryKey: ["dashboard-today"],
+    queryFn: async () => {
+      const r = await fetch("/api/dashboard/today", { headers: { Authorization: `Bearer ${token}` } });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    },
+    enabled: !!token,
+    refetchInterval: 60_000,
+    retry: 1,
+  });
+  const myTodayVisits = useMemo(
+    () => (todayData?.todayViewings ?? []).filter(v => myAgentId == null || v.agentId === myAgentId),
+    [todayData, myAgentId],
+  );
   const myConverted  = useMemo(() => myLeads.filter(l => l.status === "closed_won").length, [myLeads]);
   const myPipeline   = useMemo(() => myLeads.filter(l => !["closed_won","closed_lost"].includes(l.status)), [myLeads]);
   const overdueFollowups = useMemo(() => myLeads.filter(l => ["new","contacted"].includes(l.status)).slice(0, 4), [myLeads]);
@@ -1196,23 +1258,6 @@ function EmployeeDashboard({ activity }: {
         <KpiCard label="Pending %"         value={`${pendingPct}%`}         sub="of total leads"       icon={Target}       accent="border-l-orange-500" />
       </div>
 
-      {/* D1–D5 team segment filters */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Team:</span>
-        {TEAM_FILTERS.map(f => (
-          <button key={f} onClick={() => setTeamFilter(teamFilter === f ? null : f)}
-            className={cn("px-4 py-1.5 text-xs font-bold rounded-full border transition-colors",
-              teamFilter === f
-                ? "bg-primary text-primary-foreground border-primary shadow-sm"
-                : "border-border text-muted-foreground hover:bg-muted/50 hover:border-muted-foreground/30")}>
-            {f}
-          </button>
-        ))}
-        {teamFilter && (
-          <button onClick={() => setTeamFilter(null)} className="text-xs text-primary hover:underline">× Clear</button>
-        )}
-      </div>
-
       {/* Targets */}
       <Card>
         <SectionTitle icon={Target} title="My Monthly Targets" sub={new Date().toLocaleDateString("en-IN", { month: "long", year: "numeric" })} />
@@ -1242,27 +1287,31 @@ function EmployeeDashboard({ activity }: {
       {/* Today's site visits */}
       <Card>
         <SectionTitle icon={Calendar} title="Today's Site Visits" sub={new Date().toLocaleDateString("en-IN", { weekday: "long", month: "long", day: "numeric" })} />
-        <div className="space-y-2">
-          {TODAY_VISITS.map((v) => (
-            <div key={v.lead} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 p-3 rounded-lg border border-border hover:bg-muted/30 transition-colors">
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                <p className="text-xs font-bold text-primary whitespace-nowrap flex-shrink-0">{v.time}</p>
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-foreground truncate">{v.lead}</p>
-                  <p className="text-xs text-muted-foreground truncate">{v.project} · Unit {v.unit}</p>
+        {myTodayVisits.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-4 text-center">No site visits scheduled for today.</p>
+        ) : (
+          <div className="space-y-2">
+            {myTodayVisits.map((v) => (
+              <div key={v.id} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 p-3 rounded-lg border border-border hover:bg-muted/30 transition-colors">
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <p className="text-xs font-bold text-primary whitespace-nowrap flex-shrink-0">{v.time}</p>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-foreground truncate">{v.leadName ?? "—"}</p>
+                    <p className="text-xs text-muted-foreground truncate">{v.propertyTitle ?? "—"}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full",
+                    v.status === "confirmed" ? "bg-green-100 text-green-700"
+                    : v.status === "completed" ? "bg-blue-100 text-blue-700"
+                    : "bg-amber-100 text-amber-700")}>
+                    {v.status.charAt(0).toUpperCase() + v.status.slice(1)}
+                  </span>
                 </div>
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full", v.confirmed ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700")}>
-                  {v.confirmed ? "Confirmed" : "Pending"}
-                </span>
-                <button className="text-xs px-2.5 py-1 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 transition-opacity">
-                  Check In
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </Card>
 
       {/* Overdue follow-ups */}
@@ -1548,16 +1597,22 @@ function CFODashboard() {
   );
 }
 
-const BROKER_PERF = [
-  { name: "Vijay Broker",   leads: 14, sold: 5, pending: 9, commission: 3_80_000, lastActivity: "2d ago" },
-  { name: "Anita Kapoor",   leads: 9,  sold: 3, pending: 6, commission: 2_20_000, lastActivity: "1d ago" },
-  { name: "Suresh Reddy",   leads: 6,  sold: 2, pending: 4, commission: 1_50_000, lastActivity: "4d ago" },
-];
-
 /* ─── BROKER DASHBOARD ────────────────────────────────────────────────── */
 function BrokerDashboard({ activity }: { activity: ActivityItem[] | undefined }) {
   const [quickLeadOpen, setQuickLeadOpen] = useState(false);
+  const { token } = useAuth();
   const { data: allLeads } = useGetLeads({}, { query: { queryKey: getGetLeadsQueryKey({}) } });
+  const { data: brokerPerf = [] } = useQuery<AgentPerf[]>({
+    queryKey: ["dashboard-agents-performance"],
+    queryFn: async () => {
+      const r = await fetch("/api/dashboard/agents-performance", { headers: { Authorization: `Bearer ${token}` } });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    },
+    enabled: !!token,
+    refetchInterval: 60_000,
+  });
+  const brokerAgents = brokerPerf.filter(a => a.role === "broker");
   const brokerLeads = useMemo(() => (allLeads ?? []).filter(l => l.source === "referral" || l.source === "phone"), [allLeads]);
   const brokerConverted = brokerLeads.filter(l => l.status === "closed_won").length;
   const brokerPipeline = brokerLeads.filter(l => !["closed_won","closed_lost"].includes(l.status)).length;
@@ -1588,37 +1643,40 @@ function BrokerDashboard({ activity }: { activity: ActivityItem[] | undefined })
 
       {/* Broker performance table */}
       <Card>
-        <SectionTitle icon={BarChart2} title="Broker Performance" sub="All registered brokers — leads sourced and deals closed" />
-        <ScrollTable minWidth={520}>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border">
-                {["Broker","Leads Added","Sold","Pipeline","Est. Commission","Last Active"].map(h => (
-                  <th key={h} className="text-left pb-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider pr-3 whitespace-nowrap">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {BROKER_PERF.map((b) => (
-                <tr key={b.name} className="hover:bg-muted/20">
-                  <td className="py-2.5 pr-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center text-[10px] font-bold flex-shrink-0">
-                        {b.name.split(" ").map(w=>w[0]).join("")}
-                      </div>
-                      <span className="font-medium text-foreground text-xs whitespace-nowrap">{b.name}</span>
-                    </div>
-                  </td>
-                  <td className="py-2.5 pr-3 text-sm">{b.leads}</td>
-                  <td className="py-2.5 pr-3 text-green-600 font-semibold text-sm">{b.sold}</td>
-                  <td className="py-2.5 pr-3 text-amber-600 text-sm">{b.pending}</td>
-                  <td className="py-2.5 pr-3 font-semibold text-xs whitespace-nowrap">{formatCurrency(b.commission)}</td>
-                  <td className="py-2.5 text-muted-foreground text-xs whitespace-nowrap">{b.lastActivity}</td>
+        <SectionTitle icon={BarChart2} title="Broker Performance" sub="All registered brokers — leads sourced and deals closed this month" />
+        {brokerAgents.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-4 text-center">No broker agents found. Add brokers in team management.</p>
+        ) : (
+          <ScrollTable minWidth={480}>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  {["Channel Partner","Leads","Closed","Site Visits","Est. Commission"].map(h => (
+                    <th key={h} className="text-left pb-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider pr-3 whitespace-nowrap">{h}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </ScrollTable>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {brokerAgents.map((b) => (
+                  <tr key={b.id} className="hover:bg-muted/20">
+                    <td className="py-2.5 pr-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+                          {b.name.split(" ").map(w=>w[0]).join("")}
+                        </div>
+                        <span className="font-medium text-foreground text-xs whitespace-nowrap">{b.name}</span>
+                      </div>
+                    </td>
+                    <td className="py-2.5 pr-3 text-sm">{b.leadsThisMonth}</td>
+                    <td className="py-2.5 pr-3 text-green-600 font-semibold text-sm">{b.bookingsThisMonth}</td>
+                    <td className="py-2.5 pr-3 text-muted-foreground text-sm">{b.visitsThisMonth}</td>
+                    <td className="py-2.5 font-semibold text-xs whitespace-nowrap">{formatCurrency(b.bookingsThisMonth * 1_90_000)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </ScrollTable>
+        )}
       </Card>
 
       {/* Active leads */}
@@ -1661,11 +1719,11 @@ function BrokerDashboard({ activity }: { activity: ActivityItem[] | undefined })
 /* ─── PAGE ROOT ────────────────────────────────────────────────────────── */
 type OwnerTab = "inventory" | "cashflow" | "leads" | "analysis";
 
-const OWNER_TABS: { id: OwnerTab; label: string; shortLabel: string; icon: React.ElementType }[] = [
-  { id: "inventory", label: "Inventory",      shortLabel: "Inventory", icon: Layers    },
-  { id: "cashflow",  label: "Cash Flow",       shortLabel: "Cash Flow", icon: DollarSign },
-  { id: "leads",     label: "Lead Management", shortLabel: "Leads",     icon: Users     },
-  { id: "analysis",  label: "Analysis",        shortLabel: "Analysis",  icon: BarChart3 },
+const OWNER_TABS: { id: OwnerTab; label: string; shortLabel: string; desc: string; icon: React.ElementType }[] = [
+  { id: "inventory", label: "Inventory",       shortLabel: "Inventory", desc: "Units, availability & blocking",  icon: Layers    },
+  { id: "cashflow",  label: "Cash Flow",        shortLabel: "Cash Flow", desc: "Revenue, collections & projections", icon: DollarSign },
+  { id: "leads",     label: "Leads & Marketing",shortLabel: "Leads",     desc: "Funnel, sources & ad spend",     icon: Users     },
+  { id: "analysis",  label: "Team Analysis",    shortLabel: "Analysis",  desc: "Performance, visits & insights", icon: BarChart3 },
 ];
 
 export default function DashboardPage() {
@@ -1711,16 +1769,19 @@ export default function DashboardPage() {
       {isOwnerOrManager && (
         <div className="overflow-x-auto scrollbar-hide -mx-1 px-1 scroll-touch">
           <div className="flex gap-0.5 border-b border-border min-w-max">
-            {OWNER_TABS.map(({ id, label, shortLabel, icon: Icon }) => (
+            {OWNER_TABS.map(({ id, label, shortLabel, desc, icon: Icon }) => (
               <button key={id} onClick={() => setTab(id)}
                 className={cn(
-                  "flex items-center gap-1.5 px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap",
+                  "flex items-center gap-1.5 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap group",
                   tab === id ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground",
                 )}
               >
                 <Icon className="w-3.5 h-3.5 flex-shrink-0" />
-                <span className="sm:hidden">{shortLabel}</span>
-                <span className="hidden sm:inline">{label}</span>
+                <div className="text-left">
+                  <span className="sm:hidden">{shortLabel}</span>
+                  <span className="hidden sm:block">{label}</span>
+                  {tab === id && <p className="hidden sm:block text-[9px] font-normal opacity-70 leading-none mt-0.5">{desc}</p>}
+                </div>
               </button>
             ))}
           </div>

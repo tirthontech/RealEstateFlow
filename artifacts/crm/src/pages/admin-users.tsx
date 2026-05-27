@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  Plus, Trash2, ShieldCheck, ShieldOff, Edit2, X, Eye, EyeOff, UserCheck,
+  Plus, Trash2, ShieldCheck, ShieldOff, Edit2, X, Eye, EyeOff, UserCheck, Power, KeyRound,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { ROLE_PROFILES, type UserRole } from "@/lib/role-context";
@@ -18,6 +18,7 @@ interface PlatformUser {
   isAdmin: boolean;
   agentId: number | null;
   createdAt: string;
+  isActive: boolean;
 }
 
 // owner cannot be created via user management UI — only one owner exists
@@ -56,6 +57,7 @@ export default function AdminUsersPage() {
   const [form, setForm] = useState<typeof EMPTY_FORM>({ ...EMPTY_FORM });
   const [showPw, setShowPw] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [togglingId, setTogglingId] = useState<number | null>(null);
 
   // Redirect non-admins
   useEffect(() => {
@@ -142,6 +144,25 @@ export default function AdminUsersPage() {
     }
   }
 
+  async function handleToggleActive(u: PlatformUser) {
+    if (u.id === me?.id) {
+      toast({ title: "Cannot deactivate yourself", variant: "destructive" }); return;
+    }
+    setTogglingId(u.id);
+    try {
+      await apiFetch(`/admin/users/${u.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ isActive: !u.isActive }),
+      });
+      toast({ title: u.isActive ? `"${u.name}" deactivated` : `"${u.name}" activated` });
+      await loadUsers();
+    } catch (e: any) {
+      toast({ title: "Error updating user", description: e.message, variant: "destructive" });
+    } finally {
+      setTogglingId(null);
+    }
+  }
+
   function openEdit(u: PlatformUser) {
     setEditUser(u);
     setForm({ username: u.username, password: "", name: u.name, email: "", role: u.role as UserRole, isAdmin: u.isAdmin });
@@ -179,16 +200,16 @@ export default function AdminUsersPage() {
           <table className="w-full text-sm">
             <thead className="border-b border-border bg-muted/10">
               <tr>
-                {["Name", "Username", "Role", "Agent Profile", "Admin", "Created", ""].map(h => (
+                {["Name", "Username", "Role", "Agent Profile", "Admin", "Status", "Created", ""].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {users.map(u => (
-                <tr key={u.id} className="hover:bg-muted/20 transition-colors">
+                <tr key={u.id} className={`hover:bg-muted/20 transition-colors ${!u.isActive ? "opacity-50" : ""}`}>
                   <td className="px-4 py-3">
-                    <p className="font-medium text-foreground">{u.name}</p>
+                    <p className={`font-medium text-foreground ${!u.isActive ? "line-through" : ""}`}>{u.name}</p>
                   </td>
                   <td className="px-4 py-3">
                     <span className="font-mono text-xs text-muted-foreground">{u.username}</span>
@@ -208,20 +229,35 @@ export default function AdminUsersPage() {
                       ? <span className="flex items-center gap-1 text-xs text-primary font-medium"><ShieldCheck className="w-3.5 h-3.5" />Admin</span>
                       : <span className="flex items-center gap-1 text-xs text-muted-foreground"><ShieldOff className="w-3.5 h-3.5" />No</span>}
                   </td>
+                  <td className="px-4 py-3">
+                    {u.isActive
+                      ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-100 text-green-700">Active</span>
+                      : <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-700">Inactive</span>}
+                  </td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">
                     {new Date(u.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1">
                       <button onClick={() => openEdit(u)}
-                        className="p-1.5 rounded hover:bg-primary/10 text-primary transition-colors" title="Edit">
+                        className="p-1.5 rounded hover:bg-primary/10 text-primary transition-colors" title="Edit user">
                         <Edit2 className="w-3.5 h-3.5" />
                       </button>
                       {u.id !== me?.id && (
-                        <button onClick={() => handleDelete(u)}
-                          className="p-1.5 rounded hover:bg-destructive/10 text-destructive transition-colors" title="Delete">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <>
+                          <button
+                            onClick={() => handleToggleActive(u)}
+                            disabled={togglingId === u.id}
+                            className={`p-1.5 rounded transition-colors disabled:opacity-40 ${u.isActive ? "hover:bg-amber-50 text-amber-600" : "hover:bg-green-50 text-green-600"}`}
+                            title={u.isActive ? "Deactivate user" : "Activate user"}
+                          >
+                            <Power className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={() => handleDelete(u)}
+                            className="p-1.5 rounded hover:bg-destructive/10 text-destructive transition-colors" title="Delete user">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </>
                       )}
                     </div>
                   </td>
@@ -268,24 +304,24 @@ export default function AdminUsersPage() {
                   </div>
                 )}
 
-                <div className="col-span-2">
-                  <label className="text-xs font-medium text-muted-foreground block mb-1">
-                    {editUser ? "New Password (leave blank to keep)" : "Password *"}
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showPw ? "text" : "password"}
-                      value={form.password}
-                      onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-                      placeholder={editUser ? "••••••••" : "Min 6 characters"}
-                      className="w-full h-9 px-3 pr-9 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-                    />
-                    <button type="button" onClick={() => setShowPw(p => !p)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                      {showPw ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                    </button>
+                {!editUser && (
+                  <div className="col-span-2">
+                    <label className="text-xs font-medium text-muted-foreground block mb-1">Password *</label>
+                    <div className="relative">
+                      <input
+                        type={showPw ? "text" : "password"}
+                        value={form.password}
+                        onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+                        placeholder="Min 6 characters"
+                        className="w-full h-9 px-3 pr-9 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      />
+                      <button type="button" onClick={() => setShowPw(p => !p)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                        {showPw ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 <div>
                   <label className="text-xs font-medium text-muted-foreground block mb-1">Role *</label>
@@ -309,6 +345,32 @@ export default function AdminUsersPage() {
                     <span className="text-xs font-medium text-foreground">Grant Admin rights</span>
                   </label>
                 </div>
+
+                {/* Reset password — edit mode only */}
+                {editUser && (
+                  <div className="col-span-2">
+                    <div className="flex items-center gap-2 mb-2 mt-1">
+                      <KeyRound className="w-3.5 h-3.5 text-muted-foreground" />
+                      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Reset Password</span>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type={showPw ? "text" : "password"}
+                        value={form.password}
+                        onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+                        placeholder="Leave blank to keep current password"
+                        className="w-full h-9 px-3 pr-9 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      />
+                      <button type="button" onClick={() => setShowPw(p => !p)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                        {showPw ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                    {form.password && form.password.length < 6 && (
+                      <p className="text-[10px] text-destructive mt-1">Password must be at least 6 characters</p>
+                    )}
+                  </div>
+                )}
 
                 {/* Email — optional, shown for agent roles */}
                 {!editUser && AGENT_ROLES.includes(form.role as any) && (

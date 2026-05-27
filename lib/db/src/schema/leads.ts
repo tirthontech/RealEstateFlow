@@ -15,6 +15,8 @@ export const leadsTable = pgTable("leads", {
   notes: text("notes"),
   assignedTo: integer("assigned_to"),
   createdBy: integer("created_by"),  // user id of whoever added this lead
+  lostReason: text("lost_reason"),
+  followUpDate: timestamp("follow_up_date", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

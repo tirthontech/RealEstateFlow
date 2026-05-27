@@ -3,12 +3,11 @@ import { useGetLeads, useGetAgents, useGetProperties, getGetLeadsQueryKey, getGe
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Phone, Home, TrendingUp, CheckCircle2, Clock, Search, Plus, Download,
-  Calendar, MessageSquare, ChevronRight, X, ArrowUpDown, MessageCircle, Loader2, Trash2, Pencil,
+  Calendar, MessageSquare, ChevronRight, X, ArrowUpDown, Loader2, Trash2, Pencil,
 } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { useRole } from "@/lib/role-context";
 import { useToast } from "@/hooks/use-toast";
-import { useLocation } from "wouter";
 import { useActivities, type ScheduledActivity, type CreateActivityInput, type UpdateActivityInput } from "@/lib/use-activities";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 
@@ -478,9 +477,7 @@ function EditActivityDialog({ activity, onSave, onClose, isPending }: {
 export default function ActivitiesPage() {
   const { profile, role } = useRole();
   const isSales = role === "agent" || role === "broker";
-  const canSendWhatsApp = role === "owner" || role === "manager";
   const { toast } = useToast();
-  const [, setLocation] = useLocation();
 
   const { data: rawActivities, isLoading, create, update, remove } = useActivities();
   const activities = useMemo(() => rawActivities.map(toActivity), [rawActivities]);
@@ -544,22 +541,7 @@ export default function ActivitiesPage() {
     if (status === "cancelled") {
       toast({ title: "Activity cancelled" });
     } else if (status === "completed") {
-      if (canSendWhatsApp && act?.activityType === "phone") {
-        toast({
-          title: `Call with ${act.customer} completed`,
-          description: "Send a WhatsApp welcome message?",
-          action: (
-            <button
-              onClick={() => setLocation("/whatsapp")}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white text-xs rounded-lg font-medium hover:bg-green-700 transition-colors whitespace-nowrap"
-            >
-              <MessageCircle className="w-3.5 h-3.5" />Send Welcome
-            </button>
-          ) as any,
-        });
-      } else {
-        toast({ title: "Activity marked as done" });
-      }
+      toast({ title: "Activity marked as done" });
     }
   }
 
@@ -742,7 +724,7 @@ export default function ActivitiesPage() {
                         >
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
-                        {(role === "owner" || isSales) && (
+                        {(role === "owner" || role === "manager" || isSales) && (
                           <button
                             onClick={() => { setDeleteActivityCustomer(act.customer); setDeleteActivityId(act.id); }}
                             className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"

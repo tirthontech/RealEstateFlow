@@ -27,6 +27,8 @@ export interface Lead {
   /** Agent ID */
   assignedTo?: number | null;
   agentName?: string | null;
+  lostReason?: string | null;
+  followUpDate?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -55,6 +57,8 @@ export interface UpdateLeadBody {
   propertyType?: string | null;
   notes?: string | null;
   assignedTo?: number | null;
+  lostReason?: string | null;
+  followUpDate?: string | null;
 }
 
 export interface Property {

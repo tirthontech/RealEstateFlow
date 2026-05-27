@@ -3,9 +3,9 @@ import { eq, and, type SQL } from "drizzle-orm";
 import { db, viewingsTable, leadsTable, propertiesTable, agentsTable, activityTable } from "@workspace/db";
 import { ownerMiddleware } from "../middlewares/auth";
 
-const router: IRouter = Router();
+import { FIELD_ROLES } from "../lib/roles";
 
-const FIELD_ROLES = ["agent", "broker"];
+const router: IRouter = Router();
 
 type CreateViewingBody = {
   leadId?: number | null;
@@ -15,6 +15,10 @@ type CreateViewingBody = {
   time?: string;
   status?: string;
   notes?: string | null;
+  budgetConfirmed?: boolean;
+  timelineConfirmed?: boolean;
+  requirementsDiscussed?: boolean;
+  followUpScheduled?: boolean;
 };
 
 type UpdateViewingBody = Partial<CreateViewingBody>;
@@ -62,8 +66,9 @@ router.get("/viewings", async (req, res): Promise<void> => {
   if (leadId) conditions.push(eq(viewingsTable.leadId, Number(leadId)));
   if (agentId) conditions.push(eq(viewingsTable.agentId, Number(agentId)));
 
-  // Field agents see only their own viewings
-  if (FIELD_ROLES.includes(user.role) && user.agentId) {
+  // Field agents see only their own viewings; if no agentId linked they see nothing
+  if (FIELD_ROLES.includes(user.role)) {
+    if (!user.agentId) { res.json([]); return; }
     conditions.push(eq(viewingsTable.agentId, user.agentId));
   }
 
@@ -94,6 +99,10 @@ router.post("/viewings", async (req, res): Promise<void> => {
     time: body.time ?? "10:00",
     status: body.status ?? "pending",
     notes: body.notes ?? null,
+    budgetConfirmed: body.budgetConfirmed ?? false,
+    timelineConfirmed: body.timelineConfirmed ?? false,
+    requirementsDiscussed: body.requirementsDiscussed ?? false,
+    followUpScheduled: body.followUpScheduled ?? false,
   }).returning();
   res.status(201).json(await formatViewing(viewing));
 });
@@ -134,6 +143,10 @@ router.put("/viewings/:id", async (req, res): Promise<void> => {
   if (body.time !== undefined) updateData.time = body.time;
   if (body.status !== undefined) updateData.status = body.status;
   if (body.notes !== undefined) updateData.notes = body.notes;
+  if (body.budgetConfirmed !== undefined) updateData.budgetConfirmed = body.budgetConfirmed;
+  if (body.timelineConfirmed !== undefined) updateData.timelineConfirmed = body.timelineConfirmed;
+  if (body.requirementsDiscussed !== undefined) updateData.requirementsDiscussed = body.requirementsDiscussed;
+  if (body.followUpScheduled !== undefined) updateData.followUpScheduled = body.followUpScheduled;
 
   const [viewing] = await db.update(viewingsTable).set(updateData).where(eq(viewingsTable.id, id)).returning();
   if (!viewing) { res.status(404).json({ error: "Viewing not found" }); return; }

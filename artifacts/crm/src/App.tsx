@@ -16,15 +16,15 @@ import PropertyDetailPage from "@/pages/property-detail";
 import DealsPage from "@/pages/deals";
 import AgentsPage from "@/pages/agents";
 import AgentDetailPage from "@/pages/agent-detail";
-import AnalyticsPage from "@/pages/analytics";
-import WhatsAppPage from "@/pages/whatsapp";
-import IntegrationsPage from "@/pages/integrations";
 import SettingsPage from "@/pages/settings";
 import CommissionPage from "@/pages/commission";
 import ViewingsPage from "@/pages/viewings";
 import ApprovalsPage from "@/pages/approvals";
 import ActivitiesPage from "@/pages/activities";
 import AdminUsersPage from "@/pages/admin-users";
+import AdSpendPage from "@/pages/ad-spend";
+import PaymentPlansPage from "@/pages/payment-plans";
+import WhatsAppPage from "@/pages/whatsapp";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -69,13 +69,13 @@ function Router() {
                 <Route path="/agents"          component={AgentsPage} />
                 <Route path="/agents/:id"      component={AgentDetailPage} />
                 <Route path="/viewings"        component={ViewingsPage} />
-                <Route path="/analytics"       component={AnalyticsPage} />
-                <Route path="/whatsapp"        component={WhatsAppPage} />
-                <Route path="/integrations"    component={IntegrationsPage} />
                 <Route path="/commission"      component={CommissionPage} />
                 <Route path="/settings"        component={SettingsPage} />
                 <Route path="/approvals"       component={ApprovalsPage} />
                 <Route path="/activities"      component={ActivitiesPage} />
+                <Route path="/ad-spend"        component={AdSpendPage} />
+                <Route path="/payment-plans"   component={PaymentPlansPage} />
+                <Route path="/whatsapp"        component={WhatsAppPage} />
                 <Route path="/admin/users"     component={AdminUsersPage} />
                 <Route component={NotFound} />
               </Switch>

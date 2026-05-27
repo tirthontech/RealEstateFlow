@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, sql, isNotNull } from "drizzle-orm";
-import { db, agentsTable, leadsTable, dealsTable, usersTable, scheduledActivitiesTable, activityTable } from "@workspace/db";
+import { db, agentsTable, leadsTable, dealsTable, viewingsTable, usersTable, scheduledActivitiesTable, activityTable } from "@workspace/db";
 import { ownerMiddleware } from "../middlewares/auth";
 import {
   UpdateAgentBody,
@@ -122,6 +122,8 @@ router.delete("/agents/:id", ownerMiddleware as any, async (req, res): Promise<v
   }
 
   await db.update(leadsTable).set({ assignedTo: null }).where(eq(leadsTable.assignedTo, id));
+  await db.update(dealsTable).set({ agentId: null }).where(eq(dealsTable.agentId, id));
+  await db.update(viewingsTable).set({ agentId: null }).where(eq(viewingsTable.agentId, id));
   await db.update(scheduledActivitiesTable).set({ agentId: null }).where(eq(scheduledActivitiesTable.agentId, id));
   await db.delete(agentsTable).where(eq(agentsTable.id, id));
 

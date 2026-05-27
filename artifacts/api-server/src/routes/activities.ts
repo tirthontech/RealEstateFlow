@@ -146,21 +146,21 @@ router.put("/activities/:id", async (req, res): Promise<void> => {
   res.json(formatActivity(activity));
 });
 
-// DELETE /activities/:id — owner can delete any; agents/brokers only their own
+// DELETE /activities/:id — owner/manager can delete any; agents/brokers only their own; cfo cannot delete
 router.delete("/activities/:id", async (req, res): Promise<void> => {
   const user = req.user!;
-  const isOwner = user.role === "owner";
+  const canDeleteAny = user.role === "owner" || user.role === "manager";
   const isFieldRole = user.role === "agent" || user.role === "broker";
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
-  // Non-owner, non-field roles (manager, cfo) cannot delete
-  if (!isOwner && !isFieldRole) {
+  // cfo cannot delete activities
+  if (!canDeleteAny && !isFieldRole) {
     res.status(403).json({ error: "Forbidden" });
     return;
   }
 
-  // Field roles can only delete their own activities
+  // Field roles can only delete their own activities; owner/manager already cleared above
   if (isFieldRole && user.agentId) {
     const [existing] = await db
       .select({ id: scheduledActivitiesTable.id })

@@ -1,26 +1,48 @@
 import bcrypt from "bcryptjs";
-import { db, usersTable } from "@workspace/db";
+import { ne } from "drizzle-orm";
+import { db, usersTable, agentsTable } from "@workspace/db";
 import { logger } from "./lib/logger";
 
-// Seeds a single owner/admin account when the DB is empty.
-// All other users (agents, managers, brokers) are created by the owner via Manage Users.
 export async function seedUsers(): Promise<void> {
   try {
-    const existing = await db.select({ id: usersTable.id }).from(usersTable).limit(1);
-    if (existing.length > 0) return;
+    // Remove all non-admin users and their agent records so the owner starts fresh
+    const nonAdmins = await db
+      .select({ id: usersTable.id, agentId: usersTable.agentId })
+      .from(usersTable)
+      .where(ne(usersTable.username, "admin"));
 
+    for (const u of nonAdmins) {
+      if (u.agentId) {
+        await db.delete(agentsTable).where(
+          (await import("drizzle-orm")).eq(agentsTable.id, u.agentId),
+        );
+      }
+    }
+
+    if (nonAdmins.length > 0) {
+      await db.delete(usersTable).where(ne(usersTable.username, "admin"));
+      logger.info(`Removed ${nonAdmins.length} non-admin user(s) on startup`);
+    }
+
+    // Upsert the admin account so credentials are always correct
     const passwordHash = await bcrypt.hash("Admin@123", 10);
-    await db.insert(usersTable).values({
-      username: "admin",
-      passwordHash,
-      name: "Admin",
-      role: "owner",
-      isAdmin: true,
-      agentId: null,
-    });
+    await db
+      .insert(usersTable)
+      .values({
+        username: "admin",
+        passwordHash,
+        name: "Admin",
+        role: "owner",
+        isAdmin: true,
+        agentId: null,
+      })
+      .onConflictDoUpdate({
+        target: usersTable.username,
+        set: { passwordHash, name: "Admin", role: "owner", isAdmin: true },
+      });
 
-    logger.info("Seeded default admin user (admin / Admin@123)");
+    logger.info("Admin account ready (admin / Admin@123)");
   } catch (err) {
-    logger.error({ err }, "Failed to seed (table may not exist yet — run drizzle-kit push)");
+    logger.error({ err }, "Failed to seed admin user");
   }
 }

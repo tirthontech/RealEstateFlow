@@ -9,9 +9,9 @@ import {
   GetDealParams,
 } from "@workspace/api-zod";
 
-const router: IRouter = Router();
+import { FIELD_ROLES } from "../lib/roles";
 
-const FIELD_ROLES = ["agent", "broker"];
+const router: IRouter = Router();
 
 async function formatDeal(deal: typeof dealsTable.$inferSelect) {
   let leadName: string | null = null;
@@ -50,8 +50,9 @@ router.get("/deals", async (req, res): Promise<void> => {
   if (stage && typeof stage === "string") conditions.push(eq(dealsTable.stage, stage));
   if (agentId) conditions.push(eq(dealsTable.agentId, Number(agentId)));
 
-  // Field roles only see their own deals
-  if (FIELD_ROLES.includes(user.role) && user.agentId) {
+  // Field roles only see their own deals; if no agentId linked, they see nothing
+  if (FIELD_ROLES.includes(user.role)) {
+    if (!user.agentId) { res.json([]); return; }
     conditions.push(eq(dealsTable.agentId, user.agentId));
   }
 

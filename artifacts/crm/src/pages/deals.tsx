@@ -8,7 +8,7 @@ import {
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, Trash2, Pencil } from "lucide-react";
+import { Plus, Trash2, Pencil, Search, Download, Calendar, User, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -16,10 +16,20 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useRole } from "@/lib/role-context";
+import { useAuth } from "@/lib/auth-context";
 import { statusColor, stageLabel, formatCurrency, DEAL_STAGES } from "@/lib/utils";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 
 const STAGES = DEAL_STAGES as unknown as string[];
+
+const STAGE_META: Record<string, { color: string; border: string; desc: string; emptyHint: string }> = {
+  prospect:    { color: "bg-blue-50 text-blue-700",    border: "border-l-blue-400",    desc: "Initial interest",        emptyHint: "Drag deals here or add a new prospect" },
+  qualified:   { color: "bg-indigo-50 text-indigo-700", border: "border-l-indigo-400",  desc: "Budget & needs verified", emptyHint: "Move qualified prospects here" },
+  proposal:    { color: "bg-teal-50 text-teal-700",    border: "border-l-teal-400",    desc: "Site visit / proposal out", emptyHint: "Deals with proposals sent" },
+  negotiation: { color: "bg-amber-50 text-amber-700",  border: "border-l-amber-400",   desc: "Price discussion",        emptyHint: "Active price negotiations" },
+  closed_won:  { color: "bg-green-50 text-green-700",  border: "border-l-green-500",   desc: "Booked & signed",         emptyHint: "Closed deals appear here" },
+  closed_lost: { color: "bg-red-50 text-red-600",      border: "border-l-red-400",     desc: "Not proceeding",          emptyHint: "Lost deals tracked here" },
+};
 
 const createDealSchema = z.object({
   title: z.string().min(1, "Title required"),
@@ -49,16 +59,21 @@ type Deal = {
 
 function DealCard({ deal, onDelete, onEdit, onStageChange, canDelete }: { deal: Deal; onDelete: () => void; onEdit: () => void; onStageChange: (stage: string) => void; canDelete?: boolean }) {
   const [dragging, setDragging] = useState(false);
+  const today = new Date().toISOString().slice(0, 10);
+  const closingDate = deal.closingDate ? deal.closingDate.slice(0, 10) : null;
+  const isOverdue = closingDate && closingDate < today && !["closed_won","closed_lost"].includes(deal.stage);
+  const isDueSoon = closingDate && !isOverdue && closingDate <= new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+
   return (
     <div
       draggable
       data-testid={`card-deal-${deal.id}`}
       onDragStart={(e) => { e.dataTransfer.setData("dealId", String(deal.id)); setDragging(true); }}
       onDragEnd={() => setDragging(false)}
-      className={`bg-card border border-card-border rounded-lg p-3.5 cursor-grab active:cursor-grabbing select-none transition-opacity ${dragging ? "opacity-50" : ""}`}
+      className={`bg-card border border-card-border rounded-lg p-3 cursor-grab active:cursor-grabbing select-none transition-all hover:shadow-sm ${dragging ? "opacity-50" : ""}`}
     >
       <div className="flex items-start justify-between gap-2">
-        <p className="font-medium text-sm text-foreground leading-snug flex-1">{deal.title}</p>
+        <p className="font-semibold text-sm text-foreground leading-snug flex-1">{deal.title}</p>
         <div className="flex items-center gap-0.5 flex-shrink-0">
           <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground hover:text-primary"
             onClick={(e) => { e.stopPropagation(); onEdit(); }}>
@@ -74,9 +89,29 @@ function DealCard({ deal, onDelete, onEdit, onStageChange, canDelete }: { deal: 
         </div>
       </div>
       <p className="text-base font-bold text-primary mt-1">{formatCurrency(deal.value)}</p>
-      {deal.leadName && <p className="text-xs text-muted-foreground mt-1.5">{deal.leadName}</p>}
-      {deal.propertyTitle && <p className="text-xs text-muted-foreground truncate">{deal.propertyTitle}</p>}
-      {deal.agentName && <p className="text-xs text-muted-foreground mt-1">by {deal.agentName}</p>}
+      <div className="mt-2 space-y-1">
+        {deal.leadName && (
+          <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+            <User className="w-3 h-3 flex-shrink-0" /><span className="truncate">{deal.leadName}</span>
+          </div>
+        )}
+        {deal.propertyTitle && (
+          <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+            <Building2 className="w-3 h-3 flex-shrink-0" /><span className="truncate">{deal.propertyTitle}</span>
+          </div>
+        )}
+        {deal.agentName && (
+          <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+            <span className="truncate">by {deal.agentName}</span>
+          </div>
+        )}
+        {closingDate && (
+          <div className={`flex items-center gap-1 text-[11px] font-medium ${isOverdue ? "text-red-600" : isDueSoon ? "text-amber-600" : "text-muted-foreground"}`}>
+            <Calendar className="w-3 h-3 flex-shrink-0" />
+            <span>{isOverdue ? "Overdue: " : "Close: "}{new Date(closingDate).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -91,10 +126,11 @@ function KanbanColumn({ stage, deals, onDelete, onEdit, onDrop, canDelete }: {
 }) {
   const [over, setOver] = useState(false);
   const total = deals.reduce((s, d) => s + d.value, 0);
+  const meta = STAGE_META[stage] ?? { color: "bg-muted text-muted-foreground", border: "border-l-slate-300", desc: "", emptyHint: "No deals" };
 
   return (
     <div
-      className={`flex-shrink-0 w-64 flex flex-col rounded-lg transition-colors ${over ? "bg-primary/5 ring-1 ring-primary/30" : "bg-muted/40"}`}
+      className={`flex-shrink-0 w-64 flex flex-col rounded-lg border-l-4 transition-all ${meta.border} ${over ? "bg-primary/5 ring-1 ring-primary/20" : "bg-muted/40"}`}
       onDragOver={(e) => { e.preventDefault(); setOver(true); }}
       onDragLeave={() => setOver(false)}
       onDrop={(e) => {
@@ -106,17 +142,20 @@ function KanbanColumn({ stage, deals, onDelete, onEdit, onDrop, canDelete }: {
     >
       <div className="px-3.5 py-3 border-b border-border">
         <div className="flex items-center justify-between">
-          <span className={`text-xs font-semibold px-2 py-0.5 rounded ${statusColor(stage)}`}>{stageLabel(stage)}</span>
-          <span className="text-xs font-medium text-muted-foreground bg-muted rounded-full px-2 py-0.5">{deals.length}</span>
+          <span className={`text-xs font-bold px-2 py-0.5 rounded-md ${meta.color}`}>{stageLabel(stage)}</span>
+          <span className="text-xs font-bold text-muted-foreground bg-background border border-border rounded-full px-2 py-0.5">{deals.length}</span>
         </div>
-        {deals.length > 0 && <p className="text-xs text-muted-foreground mt-1.5">{formatCurrency(total)}</p>}
+        <p className="text-[10px] text-muted-foreground mt-1 leading-snug">{meta.desc}</p>
+        {deals.length > 0 && <p className="text-xs font-semibold text-foreground mt-1">{formatCurrency(total)}</p>}
       </div>
       <div className="p-2 space-y-2 flex-1 min-h-20 overflow-y-auto max-h-[calc(100vh-240px)]">
         {deals.map((deal) => (
           <DealCard key={deal.id} deal={deal} onDelete={() => onDelete(deal.id)} onEdit={() => onEdit(deal)} onStageChange={(s) => onDrop(deal.id, s)} canDelete={canDelete} />
         ))}
         {deals.length === 0 && (
-          <div className="flex items-center justify-center h-16 text-xs text-muted-foreground/50">Drop here</div>
+          <div className="flex flex-col items-center justify-center h-20 gap-1.5 border-2 border-dashed border-border rounded-lg m-1">
+            <p className="text-[10px] text-muted-foreground/60 text-center px-2">{meta.emptyHint}</p>
+          </div>
         )}
       </div>
     </div>
@@ -217,21 +256,19 @@ export default function DealsPage() {
   const [editDeal, setEditDeal] = useState<Deal | null>(null);
   const [deleteDealId, setDeleteDealId] = useState<number | null>(null);
   const [deleteDealTitle, setDeleteDealTitle] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const qc = useQueryClient();
   const { toast } = useToast();
-  const { role, profile } = useRole();
+  const { role } = useRole();
+  const { user } = useAuth();
   const isSales = role === "agent" || role === "broker";
   const isOwner = role === "owner";
 
-  const { data: allDeals, isLoading } = useGetDeals({}, { query: { queryKey: getGetDealsQueryKey(), refetchInterval: 30_000 } });
+  // API already filters by agentId for field roles — use response directly
+  const { data: deals, isLoading } = useGetDeals({}, { query: { queryKey: getGetDealsQueryKey(), refetchInterval: 30_000 } });
   const { data: leads } = useGetLeads({}, { query: { queryKey: ["leads"] } });
   const { data: properties } = useGetProperties({}, { query: { queryKey: ["properties"] } });
   const { data: agents } = useGetAgents();
-
-  // Salesperson sees only their own deals
-  const deals = isSales
-    ? (allDeals ?? []).filter(d => d.agentName === profile.name)
-    : allDeals;
 
   const createDeal = useCreateDeal({
     mutation: {
@@ -288,10 +325,7 @@ export default function DealsPage() {
   });
 
   function onSubmit(values: FormValues) {
-    // For salesperson, auto-assign to their own agent record by name match
-    const selfAgentId = isSales
-      ? (agents ?? []).find(a => a.name === profile.name)?.id ?? null
-      : values.agentId ?? null;
+    const selfAgentId = isSales ? (user?.agentId ?? null) : (values.agentId ?? null);
 
     createDeal.mutate({
       data: {
@@ -311,8 +345,33 @@ export default function DealsPage() {
     updateDeal.mutate({ id: dealId, data: { stage } });
   }
 
-  const dealsByStage = (stage: string) => (deals ?? []).filter((d) => d.stage === stage) as Deal[];
-  const totalPipeline = (deals ?? []).filter(d => !["closed_won", "closed_lost"].includes(d.stage)).reduce((s, d) => s + d.value, 0);
+  const q = searchQuery.trim().toLowerCase();
+  const visibleDeals = q
+    ? (deals ?? []).filter(d =>
+        d.title.toLowerCase().includes(q) ||
+        (d.leadName ?? "").toLowerCase().includes(q) ||
+        (d.agentName ?? "").toLowerCase().includes(q) ||
+        (d.propertyTitle ?? "").toLowerCase().includes(q)
+      )
+    : (deals ?? []);
+
+  function downloadDealsCsv() {
+    const headers = ["Title", "Value", "Stage", "Lead", "Property", "Sales Agent", "ClosingDate", "Notes", "Created"];
+    const rows = visibleDeals.map(d => [
+      d.title, String(d.value), d.stage,
+      d.leadName ?? "", d.propertyTitle ?? "", d.agentName ?? "",
+      d.closingDate ? d.closingDate.slice(0, 10) : "", d.notes ?? "", d.createdAt.slice(0, 10),
+    ].map(v => `"${v.replace(/"/g, '""')}"`));
+    const csv = [headers, ...rows].map(r => r.join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `deals_${new Date().toISOString().slice(0, 10)}.csv`; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  const dealsByStage = (stage: string) => visibleDeals.filter((d) => d.stage === stage) as Deal[];
+  const totalPipeline = visibleDeals.filter(d => !["closed_won", "closed_lost"].includes(d.stage)).reduce((s, d) => s + d.value, 0);
 
   return (
     <div className="p-6 space-y-5">
@@ -334,13 +393,33 @@ export default function DealsPage() {
             {isSales ? "My Deal Pipeline" : "Deal Pipeline"}
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {(deals ?? []).length} deals &middot; {formatCurrency(totalPipeline)} pipeline value
+            <span className="font-medium text-foreground">{visibleDeals.length}</span> deals · <span className="font-medium text-foreground">{formatCurrency(totalPipeline)}</span> active pipeline · <span className="text-green-600 font-medium">{visibleDeals.filter(d => d.stage === "closed_won").length} won</span>
           </p>
         </div>
-        <Button data-testid="button-create-deal" onClick={() => setShowCreate(true)} className="gap-2">
-          <Plus className="w-4 h-4" /> Add Deal
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+            <Input
+              placeholder="Search deals…"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="pl-8 h-9 w-52 text-sm"
+            />
+          </div>
+          <Button variant="outline" size="sm" className="gap-1.5 h-9" onClick={downloadDealsCsv}>
+            <Download className="w-3.5 h-3.5" />CSV
+          </Button>
+          <Button data-testid="button-create-deal" onClick={() => setShowCreate(true)} className="gap-2">
+            <Plus className="w-4 h-4" /> Add Deal
+          </Button>
+        </div>
       </div>
+
+      {!isLoading && visibleDeals.length > 0 && (
+        <p className="text-[11px] text-muted-foreground/70 flex items-center gap-1">
+          <span>Drag cards between columns to update stage · Click pencil to edit · Total pipeline excludes closed deals</span>
+        </p>
+      )}
 
       {isLoading ? (
         <div className="flex gap-4 overflow-x-auto pb-4">
@@ -385,7 +464,7 @@ export default function DealsPage() {
                   <FormItem className="col-span-2"><FormLabel>Deal Title</FormLabel><FormControl><Input data-testid="input-deal-title" {...field} /></FormControl><FormMessage /></FormItem>
                 )} />
                 <FormField control={form.control} name="value" render={({ field }) => (
-                  <FormItem><FormLabel>Value ($)</FormLabel><FormControl><Input data-testid="input-deal-value" type="number" {...field} /></FormControl><FormMessage /></FormItem>
+                  <FormItem><FormLabel>Value (₹)</FormLabel><FormControl><Input data-testid="input-deal-value" type="number" {...field} /></FormControl><FormMessage /></FormItem>
                 )} />
                 <FormField control={form.control} name="stage" render={({ field }) => (
                   <FormItem><FormLabel>Stage</FormLabel>
@@ -397,7 +476,7 @@ export default function DealsPage() {
                 )} />
                 <FormField control={form.control} name="leadId" render={({ field }) => (
                   <FormItem><FormLabel>Lead</FormLabel>
-                    <Select value={field.value?.toString() ?? ""} onValueChange={(v) => field.onChange(Number(v))}>
+                    <Select value={field.value?.toString() ?? ""} onValueChange={(v) => field.onChange(v ? Number(v) : undefined)}>
                       <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
                       <SelectContent>{(leads ?? []).map(l => <SelectItem key={l.id} value={String(l.id)}>{l.name}</SelectItem>)}</SelectContent>
                     </Select><FormMessage />
@@ -405,7 +484,7 @@ export default function DealsPage() {
                 )} />
                 <FormField control={form.control} name="propertyId" render={({ field }) => (
                   <FormItem><FormLabel>Property</FormLabel>
-                    <Select value={field.value?.toString() ?? ""} onValueChange={(v) => field.onChange(Number(v))}>
+                    <Select value={field.value?.toString() ?? ""} onValueChange={(v) => field.onChange(v ? Number(v) : undefined)}>
                       <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
                       <SelectContent>{(properties ?? []).map(p => <SelectItem key={p.id} value={String(p.id)}>{p.title}</SelectItem>)}</SelectContent>
                     </Select><FormMessage />

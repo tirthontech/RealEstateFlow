@@ -1,7 +1,7 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { eq, inArray } from "drizzle-orm";
-import { db, usersTable, agentsTable, leadsTable, scheduledActivitiesTable } from "@workspace/db";
+import { db, usersTable, agentsTable, leadsTable, dealsTable, viewingsTable, scheduledActivitiesTable } from "@workspace/db";
 import { authMiddleware, adminMiddleware } from "../middlewares/auth";
 
 const AGENT_ROLES = ["manager", "agent", "broker"];
@@ -18,6 +18,7 @@ const PUBLIC_FIELDS = {
   role: usersTable.role,
   isAdmin: usersTable.isAdmin,
   agentId: usersTable.agentId,
+  isActive: usersTable.isActive,
   createdAt: usersTable.createdAt,
 };
 
@@ -83,13 +84,14 @@ router.put("/users/:id", async (req, res): Promise<void> => {
   const [existing] = await db.select().from(usersTable).where(eq(usersTable.id, id));
   if (!existing) { res.status(404).json({ error: "User not found" }); return; }
 
-  const { name, role, isAdmin, agentId, password, email } = req.body ?? {};
+  const { name, role, isAdmin, agentId, password, email, isActive } = req.body ?? {};
   const updates: Partial<typeof usersTable.$inferInsert> = {};
-  if (name !== undefined)    updates.name = String(name).trim();
-  if (role !== undefined)    updates.role = String(role);
-  if (isAdmin !== undefined) updates.isAdmin = Boolean(isAdmin);
-  if (agentId !== undefined) updates.agentId = agentId != null ? Number(agentId) : null;
-  if (password)              updates.passwordHash = await bcrypt.hash(String(password), 10);
+  if (name !== undefined)     updates.name = String(name).trim();
+  if (role !== undefined)     updates.role = String(role);
+  if (isAdmin !== undefined)  updates.isAdmin = Boolean(isAdmin);
+  if (agentId !== undefined)  updates.agentId = agentId != null ? Number(agentId) : null;
+  if (isActive !== undefined) updates.isActive = Boolean(isActive);
+  if (password)               updates.passwordHash = await bcrypt.hash(String(password), 10);
 
   const newRole = updates.role ?? existing.role;
   const wasAgent = AGENT_ROLES.includes(existing.role);
@@ -134,9 +136,11 @@ router.delete("/users/:id", async (req, res): Promise<void> => {
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, id));
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
 
-  // Cascade: unassign leads + activities linked to their agent profile, then delete agent
+  // Cascade: unassign leads, deals, viewings + activities linked to their agent profile, then delete agent
   if (user.agentId) {
     await db.update(leadsTable).set({ assignedTo: null }).where(eq(leadsTable.assignedTo, user.agentId));
+    await db.update(dealsTable).set({ agentId: null }).where(eq(dealsTable.agentId, user.agentId));
+    await db.update(viewingsTable).set({ agentId: null }).where(eq(viewingsTable.agentId, user.agentId));
     await db.update(scheduledActivitiesTable).set({ agentId: null }).where(eq(scheduledActivitiesTable.agentId, user.agentId));
     await db.delete(agentsTable).where(eq(agentsTable.id, user.agentId));
   }

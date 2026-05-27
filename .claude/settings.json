@@ -8,7 +8,30 @@
       "PowerShell(ls \"c:\\\\Users\\\\aksha\\\\OneDrive\\\\Desktop\\\\RealEstate_Flow\\\\RealEstate_Flow\\\\artifacts\\\\crm\" | ? { $_.Name -match \"tailwind|config|css\" })",
       "Bash(pnpm --filter crm typecheck)",
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\aksha\\\\OneDrive\\\\Desktop\\\\RealEstate_Flow\\\\RealEstate_Flow\" -Directory)",
+      "Bash(Select-Object Name)",
+      "PowerShell(cd \"c:\\\\Users\\\\aksha\\\\OneDrive\\\\Desktop\\\\RealEstate_Flow\\\\RealEstate_Flow\\\\lib\\\\db\"; $env:DATABASE_URL = \"postgresql://neondb_owner:npg_7vX3toLEhdQu@ep-winter-boat-apubk6dh.c-7.us-east-1.aws.neon.tech/neondb?sslmode=require\"; npx drizzle-kit push --config ./drizzle.config.cjs 2>&1)",
+      "WebFetch(domain:realestateflow.onrender.com)",
+      "Bash(DATABASE_URL=\"postgresql://neondb_owner:npg_7vX3toLEhdQu@ep-winter-boat-apubk6dh.c-7.us-east-1.aws.neon.tech/neondb?sslmode=require\" npx drizzle-kit push --config ./drizzle.config.cjs --force)",
+      "Bash(curl -s -X POST https://realestateflow.onrender.com/api/auth/login -H \"Content-Type: application/json\" -d \"{\\\\\"username\\\\\":\\\\\"admin\\\\\",\\\\\"password\\\\\":\\\\\"Admin@123\\\\\"}\")",
+      "Bash(curl -s -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwidXNlcm5hbWUiOiJhZG1pbiIsIm5hbWUiOiJIYXJzaCBKYWluIiwicm9sZSI6Im93bmVyIiwiaXNBZG1pbiI6dHJ1ZSwiYWdlbnRJZCI6bnVsbCwiaWF0IjoxNzc4Njk0MDcxLCJleHAiOjE3NzkyOTg4NzF9.9oZjJfBIiTPhEzqk0FUWuyxH6rO08VLMws6doY3mHEg' https://realestateflow.onrender.com/api/auth/me)",
+      "Bash(curl -s -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwidXNlcm5hbWUiOiJhZG1pbiIsIm5hbWUiOiJIYXJzaCBKYWluIiwicm9sZSI6Im93bmVyIiwiaXNBZG1pbiI6dHJ1ZSwiYWdlbnRJZCI6bnVsbCwiaWF0IjoxNzc4Njk0MDcxLCJleHAiOjE3NzkyOTg4NzF9.9oZjJfBIiTPhEzqk0FUWuyxH6rO08VLMws6doY3mHEg' https://realestateflow.onrender.com/api/agents)",
+      "Bash(curl -s -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwidXNlcm5hbWUiOiJhZG1pbiIsIm5hbWUiOiJIYXJzaCBKYWluIiwicm9sZSI6Im93bmVyIiwiaXNBZG1pbiI6dHJ1ZSwiYWdlbnRJZCI6bnVsbCwiaWF0IjoxNzc4Njk0MDcxLCJleHAiOjE3NzkyOTg4NzF9.9oZjJfBIiTPhEzqk0FUWuyxH6rO08VLMws6doY3mHEg' https://realestateflow.onrender.com/api/dashboard/today)",
+      "Bash(curl -s -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwidXNlcm5hbWUiOiJhZG1pbiIsIm5hbWUiOiJIYXJzaCBKYWluIiwicm9sZSI6Im93bmVyIiwiaXNBZG1pbiI6dHJ1ZSwiYWdlbnRJZCI6bnVsbCwiaWF0IjoxNzc4Njk0MDcxLCJleHAiOjE3NzkyOTg4NzF9.9oZjJfBIiTPhEzqk0FUWuyxH6rO08VLMws6doY3mHEg' https://realestateflow.onrender.com/api/dashboard/agents-performance)",
+      "Bash(curl -s -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwidXNlcm5hbWUiOiJhZG1pbiIsIm5hbWUiOiJIYXJzaCBKYWluIiwicm9sZSI6Im93bmVyIiwiaXNBZG1pbiI6dHJ1ZSwiYWdlbnRJZCI6bnVsbCwiaWF0IjoxNzc4Njk0MDcxLCJleHAiOjE3NzkyOTg4NzF9.9oZjJfBIiTPhEzqk0FUWuyxH6rO08VLMws6doY3mHEg' https://realestateflow.onrender.com/api/units)",
+      "Bash(node -e ' *)",
+      "Bash(cat render.yaml)",
+      "Bash(cat artifacts/api-server/render.yaml)",
+      "Bash(grep '\"drizzle-orm\"\\\\|\"drizzle-kit\"' pnpm-workspace.yaml package.json)",
+      "Bash(grep -r '\"drizzle-orm\"' lib/db/package.json)",
+      "Bash(git push *)",
+      "PowerShell($env:DATABASE_URL=\"postgresql://neondb_owner:npg_7vX3toLEhdQu@ep-winter-boat-apubk6dh.c-7.us-east-1.aws.neon.tech/neondb?sslmode=require\"; cd \"c:\\\\Users\\\\aksha\\\\OneDrive\\\\Desktop\\\\RealEstate_Flow\\\\RealEstate_Flow\\\\lib\\\\db\"; node --import tsx/esm node_modules/.bin/drizzle-kit push --config ./drizzle.config.ts 2>&1)",
+      "PowerShell($env:DATABASE_URL=\"postgresql://neondb_owner:npg_7vX3toLEhdQu@ep-winter-boat-apubk6dh.c-7.us-east-1.aws.neon.tech/neondb?sslmode=require\"; cd \"c:\\\\Users\\\\aksha\\\\OneDrive\\\\Desktop\\\\RealEstate_Flow\\\\RealEstate_Flow\\\\lib\\\\db\"; node -e \"const drizzleKit = require\\('./node_modules/drizzle-kit'\\); console.log\\(drizzleKit\\)\" 2>&1)",
+      "PowerShell($env:DATABASE_URL=\"postgresql://neondb_owner:npg_7vX3toLEhdQu@ep-winter-boat-apubk6dh.c-7.us-east-1.aws.neon.tech/neondb?sslmode=require\"; cd \"c:\\\\Users\\\\aksha\\\\OneDrive\\\\Desktop\\\\RealEstate_Flow\\\\RealEstate_Flow\\\\lib\\\\db\"; node --experimental-vm-modules .\\\\node_modules\\\\.bin\\\\drizzle-kit push 2>&1)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\aksha\\.claude\\projects\\c--Users-aksha-OneDrive-Desktop-RealEstate-Flow-RealEstate-Flow\\memory"
     ]
   }
 }

@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, Users, Building2, GitBranch, UserCheck,
-  Menu, BarChart3, MessageCircle, Plug2, Settings, Calculator,
+  Menu, Settings, Calculator, TrendingUp, MessageCircle, CreditCard,
   Calendar, Bell, X, Search, ChevronRight, ChevronDown,
   CheckSquare, CalendarCheck, Zap, LogOut, ShieldCheck,
   UserPlus, CheckCheck,
@@ -24,16 +24,16 @@ const ALL_NAV = [
   { id: "leads",        href: "/leads",        label: "Leads",        icon: Users },
   { id: "properties",   href: "/properties",   label: "Properties",   icon: Building2 },
   { id: "deals",        href: "/deals",        label: "Deals",        icon: GitBranch },
-  { id: "agents",       href: "/agents",       label: "Agents",       icon: UserCheck },
+  { id: "agents",       href: "/agents",       label: "Team",         icon: UserCheck },
   { id: "viewings",     href: "/viewings",     label: "Viewings",     icon: Calendar },
   { id: "activities",   href: "/activities",   label: "Activities",   icon: CalendarCheck },
 ] as const;
 
 const ALL_TOOLS = [
-  { id: "whatsapp",     href: "/whatsapp",     label: "WhatsApp",     icon: MessageCircle },
-  { id: "analytics",    href: "/analytics",    label: "Analytics",    icon: BarChart3 },
-  { id: "commission",   href: "/commission",   label: "Commission",   icon: Calculator },
-  { id: "integrations", href: "/integrations", label: "Integrations", icon: Plug2 },
+  { id: "commission",     href: "/commission",     label: "Commission",     icon: Calculator    },
+  { id: "payment-plans",  href: "/payment-plans",  label: "Payment Plans",  icon: CreditCard    },
+  { id: "ad-spend",       href: "/ad-spend",       label: "Marketing",      icon: TrendingUp    },
+  { id: "whatsapp",       href: "/whatsapp",       label: "WhatsApp",       icon: MessageCircle },
 ] as const;
 
 /* ─── Nav item ─────────────────────────────────────────────────────────── */
@@ -44,14 +44,16 @@ function NavItem({ href, label, icon: Icon, active, onNav, badge }: {
   return (
     <Link href={href} data-testid={`nav-${label.toLowerCase()}`} onClick={onNav}
       className={cn(
-        "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-all duration-100 relative",
-        active ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm" : "text-sidebar-foreground/65 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+        "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150 relative",
+        active
+          ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm"
+          : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
       )}
     >
-      <Icon className="w-4 h-4 flex-shrink-0" />
-      {label}
+      <Icon className={cn("w-4 h-4 flex-shrink-0", active ? "opacity-100" : "opacity-70")} />
+      <span className="flex-1">{label}</span>
       {badge != null && badge > 0 && (
-        <span className="ml-auto w-5 h-5 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center flex-shrink-0">
+        <span className="w-5 h-5 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center flex-shrink-0">
           {badge > 9 ? "9+" : badge}
         </span>
       )}
@@ -75,16 +77,16 @@ function UserProfile() {
     <div className="relative">
       <button
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-sidebar-accent/50 transition-colors"
+        className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-sidebar-accent/60 transition-colors rounded-lg mx-0"
       >
-        <div className={cn("w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0", profile.color)}>
+        <div className={cn("w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0 shadow-sm", profile.color)}>
           {profile.avatar}
         </div>
         <div className="flex-1 min-w-0 text-left">
-          <p className="text-xs font-semibold text-sidebar-foreground truncate">{profile.name}</p>
-          <p className="text-[10px] text-sidebar-foreground/45 truncate">{profile.label}</p>
+          <p className="text-[13px] font-semibold text-foreground truncate leading-none">{profile.name}</p>
+          <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{profile.label}</p>
         </div>
-        <ChevronDown className={cn("w-3.5 h-3.5 text-sidebar-foreground/40 transition-transform flex-shrink-0", open && "rotate-180")} />
+        <ChevronDown className={cn("w-3.5 h-3.5 text-muted-foreground/60 transition-transform flex-shrink-0", open && "rotate-180")} />
       </button>
 
       {open && (
@@ -467,6 +469,16 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const { can, role } = useRole();
   const { user } = useAuth();
 
+  const isManagerOrOwner = role === "owner" || role === "manager";
+  const { data: allLeads } = useGetLeads(
+    {},
+    { query: { queryKey: getGetLeadsQueryKey(), refetchInterval: 30_000, enabled: isManagerOrOwner } }
+  );
+
+  const leadsBadge = isManagerOrOwner
+    ? (allLeads ?? []).filter(l => l.status === "unassigned").length
+    : 0;
+
   const approvalsBadge = 0;
 
   const mainNav = ALL_NAV.filter(n => can(n.id));
@@ -479,28 +491,36 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       {open && <div className="fixed inset-0 z-40 bg-black/50 lg:hidden" onClick={() => setOpen(false)} />}
 
       <aside className={cn(
-        "fixed inset-y-0 left-0 z-50 flex w-60 flex-col bg-sidebar border-r border-sidebar-border transition-transform duration-200 lg:static lg:translate-x-0",
+        "fixed inset-y-0 left-0 z-50 flex w-[240px] flex-col bg-sidebar border-r border-sidebar-border shadow-[1px_0_8px_rgba(0,0,0,0.04)] transition-transform duration-200 lg:static lg:translate-x-0",
         open ? "translate-x-0" : "-translate-x-full",
       )}>
-        {/* Logo */}
-        <div className="flex items-center gap-2.5 px-4 py-3 border-b border-sidebar-border">
-          <img src="/logo.png" alt="EstateFlow" className="h-9 w-auto object-contain" />
+        {/* Logo + Brand */}
+        <div className="flex items-center gap-3 px-5 py-4 border-b border-sidebar-border">
+          <img src="/logo.png" alt="RealtySell" className="h-8 w-auto object-contain flex-shrink-0" />
+          <div className="min-w-0">
+            <p className="text-[13px] font-bold text-foreground leading-none truncate">RealtySell</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5 truncate">Realty CRM</p>
+          </div>
         </div>
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 overflow-y-auto">
           {mainNav.length > 0 && (
-            <div className="mb-3">
-              <p className="text-[10px] font-semibold text-sidebar-foreground/35 uppercase tracking-widest px-3 mb-1">Main</p>
+            <div className="mb-4">
+              <p className="text-[10px] font-semibold text-sidebar-foreground/40 uppercase tracking-widest px-3 mb-1.5">Main</p>
               {mainNav.map(({ id, href, label, icon }) => (
-                <NavItem key={id} href={href} label={label} icon={icon} active={location.startsWith(href) || (href === "/dashboard" && location === "/")} onNav={() => setOpen(false)} />
+                <NavItem key={id} href={href} label={label} icon={icon}
+                  active={location.startsWith(href) || (href === "/dashboard" && location === "/")}
+                  onNav={() => setOpen(false)}
+                  badge={id === "leads" ? leadsBadge : undefined}
+                />
               ))}
             </div>
           )}
 
           {toolsNav.length > 0 && (
-            <div className="mb-3">
-              <p className="text-[10px] font-semibold text-sidebar-foreground/35 uppercase tracking-widest px-3 mb-1">Tools</p>
+            <div className="mb-4">
+              <p className="text-[10px] font-semibold text-sidebar-foreground/40 uppercase tracking-widest px-3 mb-1.5">Finance & Tools</p>
               {toolsNav.map(({ id, href, label, icon }) => (
                 <NavItem key={id} href={href} label={label} icon={icon} active={location.startsWith(href)} onNav={() => setOpen(false)} />
               ))}
@@ -508,15 +528,15 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           )}
 
           {showApprovals && (
-            <div className="mb-3">
-              <p className="text-[10px] font-semibold text-sidebar-foreground/35 uppercase tracking-widest px-3 mb-1">Workflow</p>
+            <div className="mb-4">
+              <p className="text-[10px] font-semibold text-sidebar-foreground/40 uppercase tracking-widest px-3 mb-1.5">Workflow</p>
               <NavItem href="/approvals" label="Approvals" icon={CheckSquare} active={location.startsWith("/approvals")} onNav={() => setOpen(false)} badge={approvalsBadge} />
             </div>
           )}
 
           {user?.isAdmin && (
-            <div className="mb-3">
-              <p className="text-[10px] font-semibold text-sidebar-foreground/35 uppercase tracking-widest px-3 mb-1">Admin</p>
+            <div className="mb-4">
+              <p className="text-[10px] font-semibold text-sidebar-foreground/40 uppercase tracking-widest px-3 mb-1.5">Admin</p>
               <NavItem href="/admin/users" label="Manage Users" icon={ShieldCheck} active={location.startsWith("/admin/users")} onNav={() => setOpen(false)} />
             </div>
           )}
@@ -540,12 +560,12 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Top bar */}
-        <header className="flex items-center gap-3 border-b border-border px-4 py-2 bg-card">
-          <button data-testid="button-mobile-menu" onClick={() => setOpen(true)} className="p-1.5 rounded-md hover:bg-muted lg:hidden flex-shrink-0">
+        <header className="flex items-center gap-3 border-b border-border px-5 py-2.5 bg-card shadow-[0_1px_4px_rgba(0,0,0,0.04)]">
+          <button data-testid="button-mobile-menu" onClick={() => setOpen(true)} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground lg:hidden flex-shrink-0">
             <Menu className="w-5 h-5" />
           </button>
-          <div className="flex items-center lg:hidden mr-2">
-            <img src="/logo.png" alt="EstateFlow" className="h-7 w-auto object-contain" />
+          <div className="flex items-center lg:hidden mr-1">
+            <img src="/logo.png" alt="RealtySell" className="h-7 w-auto object-contain" />
           </div>
           <div className="flex-1 flex justify-center lg:justify-start">
             <GlobalSearch />

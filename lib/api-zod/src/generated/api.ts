@@ -45,6 +45,8 @@ export const GetLeadsResponseItem = zod.object({
   notes: zod.string().nullish(),
   assignedTo: zod.number().nullish().describe("Agent ID"),
   agentName: zod.string().nullish(),
+  lostReason: zod.string().nullish(),
+  followUpDate: zod.string().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -95,6 +97,8 @@ export const GetLeadResponse = zod.object({
   notes: zod.string().nullish(),
   assignedTo: zod.number().nullish().describe("Agent ID"),
   agentName: zod.string().nullish(),
+  lostReason: zod.string().nullish(),
+  followUpDate: zod.string().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -117,6 +121,8 @@ export const UpdateLeadBody = zod.object({
   propertyType: zod.string().nullish(),
   notes: zod.string().nullish(),
   assignedTo: zod.number().nullish(),
+  lostReason: zod.string().nullish(),
+  followUpDate: zod.string().nullish(),
 });
 
 export const UpdateLeadResponse = zod.object({
@@ -141,6 +147,8 @@ export const UpdateLeadResponse = zod.object({
   notes: zod.string().nullish(),
   assignedTo: zod.number().nullish().describe("Agent ID"),
   agentName: zod.string().nullish(),
+  lostReason: zod.string().nullish(),
+  followUpDate: zod.string().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });

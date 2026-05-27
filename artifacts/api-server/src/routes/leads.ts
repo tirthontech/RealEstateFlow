@@ -10,15 +10,16 @@ import {
   GetLeadParams,
 } from "@workspace/api-zod";
 
-const router: IRouter = Router();
+import { FIELD_ROLES } from "../lib/roles";
 
-const FIELD_ROLES = ["agent", "broker"];
+const router: IRouter = Router();
 
 function formatLead(lead: typeof leadsTable.$inferSelect, agentName?: string | null) {
   return {
     ...lead,
     budget: lead.budget != null ? Number(lead.budget) : null,
     agentName: agentName ?? null,
+    followUpDate: lead.followUpDate ? lead.followUpDate.toISOString() : null,
     createdAt: lead.createdAt.toISOString(),
     updatedAt: lead.updatedAt.toISOString(),
   };
@@ -32,8 +33,9 @@ router.get("/leads", async (req, res): Promise<void> => {
   if (status && typeof status === "string") conditions.push(eq(leadsTable.status, status));
   if (assignedTo) conditions.push(eq(leadsTable.assignedTo, Number(assignedTo)));
 
-  // Agents and brokers only see leads assigned to them
-  if (FIELD_ROLES.includes(user.role) && user.agentId) {
+  // Field roles only see their own leads; if no agentId linked they see nothing
+  if (FIELD_ROLES.includes(user.role)) {
+    if (!user.agentId) { res.json([]); return; }
     conditions.push(eq(leadsTable.assignedTo, user.agentId));
   }
 
@@ -160,6 +162,7 @@ router.put("/leads/:id", async (req, res): Promise<void> => {
   const updateData: Record<string, unknown> = {
     ...parsed.data,
     budget: parsed.data.budget != null ? String(parsed.data.budget) : parsed.data.budget,
+    followUpDate: parsed.data.followUpDate ? new Date(parsed.data.followUpDate) : parsed.data.followUpDate,
   };
   if (parsed.data.assignedTo && prevLead.status === "unassigned") {
     updateData.status = "new";

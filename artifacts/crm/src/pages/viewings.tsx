@@ -27,6 +27,10 @@ type ViewingRecord = {
   propertyTitle?: string | null;
   propertyPrice?: number | null;
   agentName?: string | null;
+  budgetConfirmed?: boolean;
+  timelineConfirmed?: boolean;
+  requirementsDiscussed?: boolean;
+  followUpScheduled?: boolean;
 };
 
 const STATUS_CONFIG: Record<Status, { label: string; color: string; icon: typeof CheckCircle2 }> = {
@@ -78,7 +82,9 @@ export default function ViewingsPage() {
   const canEdit = role === "owner" || role === "manager";
   const [showAdd, setShowAdd] = useState(false);
   const [filterStatus, setFilterStatus] = useState<Status | "all">("all");
-  const [newViewing, setNewViewing] = useState({ leadId: "", propertyId: "", agentId: "", date: "", time: "10:00", notes: "" });
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [newViewing, setNewViewing] = useState({ leadId: "", propertyId: "", agentId: "", date: "", time: "10:00", notes: "", budgetConfirmed: false, timelineConfirmed: false, requirementsDiscussed: false, followUpScheduled: false });
   const [deleteViewingId, setDeleteViewingId] = useState<number | null>(null);
   const [editViewing, setEditViewing] = useState<ViewingRecord | null>(null);
 
@@ -105,10 +111,14 @@ export default function ViewingsPage() {
         time: newViewing.time,
         notes: newViewing.notes || null,
         status: "pending",
+        budgetConfirmed: newViewing.budgetConfirmed,
+        timelineConfirmed: newViewing.timelineConfirmed,
+        requirementsDiscussed: newViewing.requirementsDiscussed,
+        followUpScheduled: newViewing.followUpScheduled,
       },
       {
         onSuccess: () => {
-          setNewViewing({ leadId: "", propertyId: "", agentId: "", date: "", time: "10:00", notes: "" });
+          setNewViewing({ leadId: "", propertyId: "", agentId: "", date: "", time: "10:00", notes: "", budgetConfirmed: false, timelineConfirmed: false, requirementsDiscussed: false, followUpScheduled: false });
           setShowAdd(false);
           toast({ title: "Viewing scheduled" });
         },
@@ -131,7 +141,12 @@ export default function ViewingsPage() {
     });
   }
 
-  const filtered = viewings.filter((v) => filterStatus === "all" || v.status === filterStatus);
+  const filtered = viewings.filter((v) => {
+    if (filterStatus !== "all" && v.status !== filterStatus) return false;
+    if (dateFrom && v.date < dateFrom) return false;
+    if (dateTo && v.date > dateTo) return false;
+    return true;
+  });
   const upcomingCount = viewings.filter((v) => v.status === "confirmed" || v.status === "pending").length;
   const completedCount = viewings.filter((v) => v.status === "completed").length;
   const noShowCount = viewings.filter((v) => v.status === "no_show").length;
@@ -195,7 +210,7 @@ export default function ViewingsPage() {
               </select>
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-foreground">Agent</label>
+              <label className="text-xs font-medium text-foreground">Assigned Agent</label>
               <select className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm" value={newViewing.agentId} onChange={(e) => setNewViewing({ ...newViewing, agentId: e.target.value })}>
                 <option value="">Assign agent...</option>
                 {(agents ?? []).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
@@ -214,6 +229,23 @@ export default function ViewingsPage() {
               <Input placeholder="Optional notes..." value={newViewing.notes} onChange={(e) => setNewViewing({ ...newViewing, notes: e.target.value })} />
             </div>
           </div>
+          <div className="border border-dashed border-border rounded-lg p-3">
+            <p className="text-xs font-semibold text-muted-foreground mb-2">Qualification Checklist</p>
+            <div className="grid grid-cols-2 gap-2">
+              {([
+                { key: "budgetConfirmed", label: "Budget Confirmed" },
+                { key: "timelineConfirmed", label: "Timeline Confirmed" },
+                { key: "requirementsDiscussed", label: "Requirements Discussed" },
+                { key: "followUpScheduled", label: "Follow-up Scheduled" },
+              ] as const).map(({ key, label }) => (
+                <label key={key} className="flex items-center gap-2 text-xs text-foreground cursor-pointer select-none">
+                  <input type="checkbox" checked={newViewing[key]} onChange={e => setNewViewing(v => ({ ...v, [key]: e.target.checked }))}
+                    className="w-3.5 h-3.5 rounded border-border text-primary focus:ring-primary/30" />
+                  {label}
+                </label>
+              ))}
+            </div>
+          </div>
           <div className="flex justify-end gap-2">
             <Button variant="outline" size="sm" onClick={() => setShowAdd(false)}>Cancel</Button>
             <Button size="sm" onClick={addViewing} disabled={createViewing.isPending}>
@@ -224,19 +256,30 @@ export default function ViewingsPage() {
       )}
 
       {/* Filter bar */}
-      <div className="flex gap-2 flex-wrap">
-        {(["all", "confirmed", "pending", "completed", "no_show", "cancelled"] as const).map((s) => (
-          <button
-            key={s}
-            onClick={() => setFilterStatus(s)}
-            className={cn(
-              "px-3 py-1.5 rounded-full text-xs font-medium transition-colors capitalize",
-              filterStatus === s ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70"
-            )}
-          >
-            {s === "all" ? `All (${viewings.length})` : s === "no_show" ? "No Show" : STATUS_CONFIG[s].label}
-          </button>
-        ))}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex gap-2 flex-wrap flex-1">
+          {(["all", "confirmed", "pending", "completed", "no_show", "cancelled"] as const).map((s) => (
+            <button
+              key={s}
+              onClick={() => setFilterStatus(s)}
+              className={cn(
+                "px-3 py-1.5 rounded-full text-xs font-medium transition-colors capitalize",
+                filterStatus === s ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70"
+              )}
+            >
+              {s === "all" ? `All (${viewings.length})` : s === "no_show" ? "No Show" : STATUS_CONFIG[s].label}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground whitespace-nowrap">Date range:</span>
+          <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="h-8 w-36 text-xs" />
+          <span className="text-xs text-muted-foreground">–</span>
+          <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="h-8 w-36 text-xs" />
+          {(dateFrom || dateTo) && (
+            <button onClick={() => { setDateFrom(""); setDateTo(""); }} className="text-xs text-muted-foreground hover:text-foreground underline">Clear</button>
+          )}
+        </div>
       </div>
 
       {/* Viewings list */}
@@ -291,6 +334,21 @@ export default function ViewingsPage() {
                       {v.leadPhone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{v.leadPhone}</span>}
                     </div>
                     {v.notes && <p className="text-xs text-muted-foreground mt-1.5 italic">"{v.notes}"</p>}
+                    {(v.status === "completed" || v.budgetConfirmed || v.timelineConfirmed || v.requirementsDiscussed || v.followUpScheduled) && (
+                      <div className="flex gap-1.5 mt-1.5 flex-wrap">
+                        {([
+                          { key: "budgetConfirmed", label: "Budget" },
+                          { key: "timelineConfirmed", label: "Timeline" },
+                          { key: "requirementsDiscussed", label: "Requirements" },
+                          { key: "followUpScheduled", label: "Follow-up" },
+                        ] as const).map(({ key, label }) => (
+                          <span key={key} className={cn("text-[10px] px-1.5 py-0.5 rounded border font-medium",
+                            v[key] ? "bg-green-50 text-green-700 border-green-200" : "bg-muted text-muted-foreground border-border")}>
+                            {v[key] ? "✓" : "○"} {label}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   {/* Actions */}
@@ -298,8 +356,9 @@ export default function ViewingsPage() {
                     {isUpcoming && (
                       <>
                         <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-green-700 border-green-200 hover:bg-green-50"
-                          onClick={() => changeStatus(v.id, "completed")}>
-                          <CheckCircle2 className="w-3 h-3" />Done
+                          onClick={() => changeStatus(v.id, "completed")}
+                          disabled={updateViewing.isPending}>
+                          <CheckCircle2 className="w-3 h-3" />Check In
                         </Button>
                         <Button size="sm" variant="outline" className="h-7 text-xs text-red-600 border-red-200 hover:bg-red-50"
                           onClick={() => changeStatus(v.id, "no_show")}>
@@ -375,6 +434,10 @@ function EditViewingForm({ viewing, leads, properties, agents, onSave, onClose, 
     time: viewing.time,
     status: viewing.status,
     notes: viewing.notes ?? "",
+    budgetConfirmed: viewing.budgetConfirmed ?? false,
+    timelineConfirmed: viewing.timelineConfirmed ?? false,
+    requirementsDiscussed: viewing.requirementsDiscussed ?? false,
+    followUpScheduled: viewing.followUpScheduled ?? false,
   });
 
   const inp = "w-full h-9 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30";
@@ -397,7 +460,7 @@ function EditViewingForm({ viewing, leads, properties, agents, onSave, onClose, 
           </select>
         </div>
         <div className="col-span-2">
-          <label className="text-xs font-medium text-muted-foreground block mb-1">Agent</label>
+          <label className="text-xs font-medium text-muted-foreground block mb-1">Assigned Agent</label>
           <select value={form.agentId} onChange={e => setForm(p => ({ ...p, agentId: e.target.value }))} className={inp}>
             <option value="">— Unassigned —</option>
             {(agents ?? []).map(a => <option key={a.id} value={String(a.id)}>{a.name}</option>)}
@@ -423,6 +486,23 @@ function EditViewingForm({ viewing, leads, properties, agents, onSave, onClose, 
           <label className="text-xs font-medium text-muted-foreground block mb-1">Notes</label>
           <input value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} placeholder="Optional notes..." className={inp} />
         </div>
+        <div className="col-span-2 border border-dashed border-border rounded-lg p-3">
+          <p className="text-xs font-semibold text-muted-foreground mb-2">Qualification Checklist</p>
+          <div className="grid grid-cols-2 gap-2">
+            {([
+              { key: "budgetConfirmed", label: "Budget Confirmed" },
+              { key: "timelineConfirmed", label: "Timeline Confirmed" },
+              { key: "requirementsDiscussed", label: "Requirements Discussed" },
+              { key: "followUpScheduled", label: "Follow-up Scheduled" },
+            ] as const).map(({ key, label }) => (
+              <label key={key} className="flex items-center gap-2 text-xs text-foreground cursor-pointer select-none">
+                <input type="checkbox" checked={form[key]} onChange={e => setForm(p => ({ ...p, [key]: e.target.checked }))}
+                  className="w-3.5 h-3.5 rounded border-border" />
+                {label}
+              </label>
+            ))}
+          </div>
+        </div>
       </div>
       <div className="flex gap-2 pt-1">
         <Button className="flex-1" onClick={() => onSave({
@@ -433,6 +513,10 @@ function EditViewingForm({ viewing, leads, properties, agents, onSave, onClose, 
           time: form.time,
           status: form.status as Status,
           notes: form.notes || null,
+          budgetConfirmed: form.budgetConfirmed,
+          timelineConfirmed: form.timelineConfirmed,
+          requirementsDiscussed: form.requirementsDiscussed,
+          followUpScheduled: form.followUpScheduled,
         })} disabled={isPending}>
           {isPending ? "Saving..." : "Save Changes"}
         </Button>

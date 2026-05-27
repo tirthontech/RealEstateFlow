@@ -4,7 +4,7 @@ import { useLocation } from "wouter";
 import {
   useGetLeads, useCreateLead, useDeleteLead, useUpdateLead,
   getGetLeadsQueryKey, getGetDashboardStatsQueryKey, getGetLeadSourcesQueryKey,
-  useGetAgents,
+  useGetAgents, useGetProperties,
 } from "@workspace/api-client-react";
 import type { Lead } from "@workspace/api-client-react";
 import { useForm } from "react-hook-form";
@@ -44,8 +44,6 @@ const SOURCE_COLORS: Record<string, string> = {
   ivr:          "bg-amber-50 text-amber-700 border-amber-200",
 };
 
-const PROJECTS = ["Prestige Lakeside", "Godrej Summit", "DLF Cybercity", "Sobha Royal Crest"];
-
 /* Tab config — null statuses means "show all" */
 const LEAD_TABS = [
   { id: "all",         label: "All",         statuses: null as string[] | null,             color: "text-slate-600" },
@@ -58,9 +56,10 @@ const LEAD_TABS = [
 
 /* Quick filters */
 const QUICK_FILTERS = [
-  { id: "fresh",   label: "Fresh Leads",  icon: Plus },
-  { id: "today",   label: "Today Leads",  icon: Calendar },
-  { id: "latest",  label: "Latest Leads", icon: Clock },
+  { id: "fresh",          label: "Fresh Leads",     icon: Plus },
+  { id: "today",          label: "Today Leads",     icon: Calendar },
+  { id: "latest",         label: "Latest Leads",    icon: Clock },
+  { id: "follow_up_due",  label: "Follow-up Due",   icon: AlertTriangle },
 ] as const;
 
 /* Activity types for scheduling */
@@ -95,8 +94,10 @@ function ScheduleActivityDialog({ leadId, leadName, leadPhone, open, onClose }: 
   const { profile } = useRole();
   const { toast } = useToast();
   const activities = useActivities();
+  const { data: properties } = useGetProperties();
+  const projectOptions = (properties ?? []).map(p => p.title);
   const [form, setForm] = useState({
-    activityType: "phone", project: PROJECTS[0], date: new Date().toISOString().slice(0, 10),
+    activityType: "phone", project: "", date: new Date().toISOString().slice(0, 10),
     time: "10:00", remark: "", employee: profile.name,
   });
 
@@ -149,7 +150,8 @@ function ScheduleActivityDialog({ leadId, leadName, leadPhone, open, onClose }: 
           <label className="text-xs font-medium text-muted-foreground block mb-1">Project</label>
           <select value={form.project} onChange={e => setForm(p => ({ ...p, project: e.target.value }))}
             className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/30">
-            {PROJECTS.map(pr => <option key={pr} value={pr}>{pr}</option>)}
+            <option value="">— None —</option>
+            {projectOptions.map(pr => <option key={pr} value={pr}>{pr}</option>)}
           </select>
         </div>
 
@@ -224,6 +226,16 @@ const LEAD_STATUS_OPTIONS = LEAD_STATUSES.filter(s => s !== "unassigned").map(s 
   value: s, label: stageLabel(s),
 }));
 
+const LOST_REASON_OPTIONS = [
+  "Budget too high",
+  "Location preference",
+  "Competitor offering",
+  "Project delay concern",
+  "Config unavailable",
+  "No response",
+  "Other",
+];
+
 function statusDot(status: string) {
   const map: Record<string, string> = {
     new: "bg-blue-500", contacted: "bg-purple-500", qualified: "bg-indigo-500",
@@ -233,8 +245,11 @@ function statusDot(status: string) {
   return map[status] ?? "bg-slate-400";
 }
 
-function LeadStatusToggle({ lead, onUpdate }: { lead: Lead; onUpdate: (id: number, status: string) => void }) {
+function LeadStatusToggle({ lead, onUpdate }: { lead: Lead; onUpdate: (id: number, status: string, lostReason?: string) => void }) {
   const [open, setOpen] = useState(false);
+  const [showLostReason, setShowLostReason] = useState(false);
+  const [selectedReason, setSelectedReason] = useState("");
+
   if (lead.status === "unassigned") {
     return (
       <span className={cn("inline-flex px-2 py-0.5 rounded text-[10px] font-medium whitespace-nowrap", statusColor(lead.status))}>
@@ -242,6 +257,24 @@ function LeadStatusToggle({ lead, onUpdate }: { lead: Lead; onUpdate: (id: numbe
       </span>
     );
   }
+
+  function handleSelect(status: string) {
+    setOpen(false);
+    if (status === "closed_lost") {
+      setSelectedReason("");
+      setShowLostReason(true);
+    } else {
+      onUpdate(lead.id, status);
+    }
+  }
+
+  function submitLostReason() {
+    if (!selectedReason) return;
+    onUpdate(lead.id, "closed_lost", selectedReason);
+    setShowLostReason(false);
+    setSelectedReason("");
+  }
+
   return (
     <div className="relative">
       <button
@@ -256,7 +289,7 @@ function LeadStatusToggle({ lead, onUpdate }: { lead: Lead; onUpdate: (id: numbe
           <div className="absolute right-0 z-50 mt-1 bg-card border border-border rounded-lg shadow-xl overflow-hidden min-w-[140px]">
             {LEAD_STATUS_OPTIONS.map(opt => (
               <button key={opt.value}
-                onClick={e => { e.stopPropagation(); onUpdate(lead.id, opt.value); setOpen(false); }}
+                onClick={e => { e.stopPropagation(); handleSelect(opt.value); }}
                 className={cn("w-full flex items-center gap-2 px-3 py-2 text-[11px] font-medium hover:bg-muted/50 transition-colors text-left",
                   lead.status === opt.value && "bg-muted/40")}>
                 <span className={cn("w-2 h-2 rounded-full flex-shrink-0", statusDot(opt.value))} />
@@ -265,6 +298,42 @@ function LeadStatusToggle({ lead, onUpdate }: { lead: Lead; onUpdate: (id: numbe
             ))}
           </div>
         </>
+      )}
+      {showLostReason && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={e => e.stopPropagation()}>
+          <div className="bg-card rounded-xl border border-border shadow-xl w-full max-w-sm p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-foreground flex items-center gap-2">
+                <X className="w-4 h-4 text-red-500" />Reason for Lost Lead
+              </h3>
+              <button onClick={() => setShowLostReason(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground">Why is <span className="font-semibold text-foreground">{lead.name}</span> being marked as lost?</p>
+            <div className="grid grid-cols-1 gap-1.5">
+              {LOST_REASON_OPTIONS.map(r => (
+                <button key={r} onClick={() => setSelectedReason(r)}
+                  className={cn("px-3 py-2 rounded-lg text-xs font-medium border text-left transition-all",
+                    selectedReason === r
+                      ? "bg-red-50 border-red-300 text-red-700 ring-2 ring-red-200"
+                      : "border-border text-muted-foreground hover:border-red-200 hover:text-foreground")}>
+                  {r}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button onClick={submitLostReason} disabled={!selectedReason}
+                className="flex-1 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-40">
+                Mark as Lost
+              </button>
+              <button onClick={() => setShowLostReason(false)}
+                className="flex-1 py-2 border border-border rounded-lg text-sm font-medium hover:bg-muted/50 transition-colors">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -335,7 +404,7 @@ function AssignLeadDialog({ lead, agents, onAssign, onClose }: {
         </div>
 
         <div>
-          <label className="text-xs font-medium text-muted-foreground block mb-1.5">Assign to Agent</label>
+          <label className="text-xs font-medium text-muted-foreground block mb-1.5">Assign to Sales Agent</label>
           <select value={selectedAgentId} onChange={e => setSelectedAgentId(e.target.value)}
             className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/30">
             <option value="">— Choose an agent —</option>
@@ -562,8 +631,8 @@ export default function LeadsPage() {
     },
   });
 
-  function handleStatusChange(leadId: number, status: string) {
-    statusChangeMutation.mutate({ id: leadId, data: { status } });
+  function handleStatusChange(leadId: number, status: string, lostReason?: string) {
+    statusChangeMutation.mutate({ id: leadId, data: { status, lostReason: lostReason ?? null } });
   }
 
   function handleAssign(leadId: number, agentId: number) {
@@ -626,6 +695,7 @@ export default function LeadsPage() {
     if (quickFilter === "fresh") list = list.filter(l => l.status === "new");
     else if (quickFilter === "today") list = list.filter(l => l.createdAt.slice(0, 10) === today);
     else if (quickFilter === "latest") list = list.filter(l => l.createdAt >= sevenDaysAgo);
+    else if (quickFilter === "follow_up_due") list = list.filter(l => (l as any).followUpDate && (l as any).followUpDate.slice(0, 10) <= today);
 
     if (search) {
       const q = search.toLowerCase();
@@ -640,17 +710,23 @@ export default function LeadsPage() {
   }, [tabFiltered, quickFilter, search, today, sevenDaysAgo]);
 
   function projectLabel(lead: typeof allLeads[0]) {
-    const map: Record<string, string> = {
-      residential: "Prestige Lakeside",
-      commercial:  "DLF Cybercity",
-      land:        "Sobha Royal Crest",
-      rental:      "Godrej Summit",
-    };
-    return lead.propertyType ? map[lead.propertyType] ?? "Prestige Lakeside" : "—";
+    if (!lead.propertyType) return "—";
+    return lead.propertyType.charAt(0).toUpperCase() + lead.propertyType.slice(1).replace(/_/g, " ");
   }
 
-  function scheduledLabel(lead: typeof allLeads[0]) {
-    return lead.createdAt.slice(0, 10);
+  function downloadLeadsCsv() {
+    const headers = ["Name", "Email", "Phone", "Source", "Status", "Score", "Budget", "PropertyType", "Sales Agent", "Project", "Created"];
+    const rows = displayed.map(l => [
+      l.name, l.email, l.phone ?? "", l.source, l.status,
+      String(l.score ?? ""), l.budget != null ? String(l.budget) : "",
+      l.propertyType ?? "", l.agentName ?? "", projectLabel(l), l.createdAt.slice(0, 10),
+    ].map(v => `"${String(v).replace(/"/g, '""')}"`));
+    const csv = [headers, ...rows].map(r => r.join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `leads_${new Date().toISOString().slice(0, 10)}.csv`; a.click();
+    URL.revokeObjectURL(url);
   }
 
   const hour = new Date().getHours();
@@ -696,7 +772,7 @@ export default function LeadsPage() {
         <div className="min-w-0">
           <h1 className="text-xl sm:text-2xl font-bold text-foreground leading-tight">{greeting}, {profile.name.split(" ")[0]}!</h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-            Manage your leads — <span className="font-medium text-foreground">{allLeads.length} total</span> · {allLeads.filter(l => l.status === "new").length} fresh leads this session
+            <span className="font-medium text-foreground">{allLeads.length}</span> total leads · <span className="font-medium text-foreground">{allLeads.filter(l => l.status === "new").length}</span> new · <span className="font-medium text-foreground">{allLeads.filter(l => l.status === "closed_won").length}</span> closed won
           </p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
@@ -795,6 +871,9 @@ export default function LeadsPage() {
               <span className="text-xs text-muted-foreground hidden sm:block">
                 {allLeads.filter(l => l.status === "closed_won").length} closed won
               </span>
+              <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={downloadLeadsCsv}>
+                <Download className="w-3 h-3" />CSV
+              </Button>
             </div>
           </div>
 
@@ -802,7 +881,7 @@ export default function LeadsPage() {
             <table className="w-full text-sm" style={{ minWidth: 700 }}>
               <thead className="border-b border-border bg-muted/10">
                 <tr>
-                  {["Customers", "Mobile", "Source", "Project", "Scheduled", "Employee", "Status", ""].map(h => (
+                  {["Lead", "Mobile", "Source", "Property Type", "Assigned Agent", "Status", ""].map(h => (
                     <th key={h} className="text-left px-4 py-3 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -841,6 +920,11 @@ export default function LeadsPage() {
                                 </span>
                               );
                             })()}
+                            {(lead as any).followUpDate && (lead as any).followUpDate.slice(0, 10) <= today && (
+                              <span className="inline-flex items-center gap-0.5 px-1 py-0 rounded text-[9px] border flex-shrink-0 bg-orange-50 text-orange-700 border-orange-200">
+                                <Clock className="w-2.5 h-2.5" />Due
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -867,11 +951,6 @@ export default function LeadsPage() {
                       <span className="text-xs text-foreground font-medium truncate max-w-[120px] block">
                         {projectLabel(lead)}
                       </span>
-                    </td>
-
-                    {/* Scheduled */}
-                    <td className="px-4 py-3">
-                      <span className="text-xs text-muted-foreground whitespace-nowrap">{scheduledLabel(lead)}</span>
                     </td>
 
                     {/* Employee */}

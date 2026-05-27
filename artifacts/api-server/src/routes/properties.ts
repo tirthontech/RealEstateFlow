@@ -11,6 +11,11 @@ import {
 
 const router: IRouter = Router();
 
+function ownerOrManager(req: any, res: any, next: any) {
+  if (req.user?.role === "owner" || req.user?.role === "manager") return next();
+  res.status(403).json({ error: "Owner or manager access required" });
+}
+
 function formatProperty(prop: typeof propertiesTable.$inferSelect, agentName?: string | null) {
   return {
     ...prop,
@@ -41,7 +46,7 @@ router.get("/properties", async (req, res): Promise<void> => {
   res.json(rows.map((p) => formatProperty(p, agentMap.get(p.agentId ?? -1))));
 });
 
-router.post("/properties", async (req, res): Promise<void> => {
+router.post("/properties", ownerOrManager, async (req, res): Promise<void> => {
   const parsed = CreatePropertyBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -90,7 +95,7 @@ router.get("/properties/:id", async (req, res): Promise<void> => {
   res.json(formatProperty(prop, agentName));
 });
 
-router.put("/properties/:id", async (req, res): Promise<void> => {
+router.put("/properties/:id", ownerOrManager, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const params = UpdatePropertyParams.safeParse({ id: Number(raw) });
   if (!params.success) {

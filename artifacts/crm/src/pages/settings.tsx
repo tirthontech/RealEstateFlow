@@ -1,9 +1,20 @@
-import { useState } from "react";
-import { Building2, CreditCard, Bell, Shield, Check, ChevronRight } from "lucide-react";
+import { useState, useRef } from "react";
+import { Building2, CreditCard, Bell, Shield, Check, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+
+const AGENCY_KEY = "ef_agency_settings";
+const NOTIF_KEY  = "ef_notif_prefs";
+const LOGO_KEY   = "ef_agency_logo";
+
+function readLS<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch { return fallback; }
+}
 
 const TABS = [
   { id: "agency", label: "Agency Profile", icon: Building2 },
@@ -53,18 +64,38 @@ function Toggle({ label, description, checked, onChange }: {
   );
 }
 
+const AGENCY_DEFAULTS = {
+  name: "RealtySell Realty Pvt. Ltd.",
+  rera: "RERA/KA/AGENT/2024/001234",
+  gst: "29AABCE1234F1Z5",
+  address: "42 MG Road, Indiranagar, Bengaluru - 560038",
+  phone: "+91 80 4567 8901",
+  email: "admin@realtysell.in",
+  website: "https://realtysell.in",
+  timezone: "Asia/Kolkata",
+};
+
 function AgencyTab() {
   const { toast } = useToast();
-  const [form, setForm] = useState({
-    name: "EstateFlow Realty Pvt. Ltd.",
-    rera: "RERA/KA/AGENT/2024/001234",
-    gst: "29AABCE1234F1Z5",
-    address: "42 MG Road, Indiranagar, Bengaluru - 560038",
-    phone: "+91 80 4567 8901",
-    email: "admin@estateflow.in",
-    website: "https://estateflow.in",
-    timezone: "Asia/Kolkata",
-  });
+  const [form, setForm] = useState(() => readLS(AGENCY_KEY, AGENCY_DEFAULTS));
+  const [logoUrl, setLogoUrl] = useState<string>(() => localStorage.getItem(LOGO_KEY) ?? "");
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      toast({ title: "Logo must be under 2 MB", variant: "destructive" }); return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const url = reader.result as string;
+      localStorage.setItem(LOGO_KEY, url);
+      setLogoUrl(url);
+      toast({ title: "Logo uploaded ✓" });
+    };
+    reader.readAsDataURL(file);
+  }
 
   return (
     <div className="space-y-6">
@@ -100,18 +131,40 @@ function AgencyTab() {
       <div className="bg-card border border-card-border rounded-lg p-6">
         <SectionHeader title="Branding" subtitle="Customise how your CRM looks to your team" />
         <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-xl bg-primary flex items-center justify-center text-primary-foreground">
-            <Building2 className="w-7 h-7" />
+          <div className="w-16 h-16 rounded-xl bg-primary flex items-center justify-center text-primary-foreground overflow-hidden flex-shrink-0">
+            {logoUrl
+              ? <img src={logoUrl} alt="Agency logo" className="w-full h-full object-cover" />
+              : <Building2 className="w-7 h-7" />}
           </div>
           <div>
-            <Button variant="outline" size="sm">Upload Logo</Button>
-            <p className="text-xs text-muted-foreground mt-1">PNG or SVG · 400×400px recommended</p>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/png,image/svg+xml,image/jpeg,image/webp"
+              className="hidden"
+              onChange={handleLogoChange}
+            />
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()} className="gap-1.5">
+                <Upload className="w-3.5 h-3.5" />Upload Logo
+              </Button>
+              {logoUrl && (
+                <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive text-xs"
+                  onClick={() => { localStorage.removeItem(LOGO_KEY); setLogoUrl(""); toast({ title: "Logo removed" }); }}>
+                  Remove
+                </Button>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">PNG, SVG, JPG or WebP · 400×400px recommended · Max 2 MB</p>
           </div>
         </div>
       </div>
 
       <div className="flex justify-end">
-        <Button onClick={() => toast({ title: "Agency profile saved ✓" })}>Save Changes</Button>
+        <Button onClick={() => {
+          localStorage.setItem(AGENCY_KEY, JSON.stringify(form));
+          toast({ title: "Agency profile saved ✓" });
+        }}>Save Changes</Button>
       </div>
     </div>
   );
@@ -202,12 +255,14 @@ function BillingTab() {
   );
 }
 
+const NOTIF_DEFAULTS = {
+  newLead: true, dealUpdate: true, agentActivity: false, portalSync: true,
+  weeklyDigest: true, whatsappAlerts: false, smsAlerts: true, browserPush: true,
+};
+
 function NotificationsTab() {
   const { toast } = useToast();
-  const [prefs, setPrefs] = useState({
-    newLead: true, dealUpdate: true, agentActivity: false, portalSync: true,
-    weeklyDigest: true, whatsappAlerts: false, smsAlerts: true, browserPush: true,
-  });
+  const [prefs, setPrefs] = useState(() => readLS(NOTIF_KEY, NOTIF_DEFAULTS));
 
   type PrefKey = keyof typeof prefs;
   const toggle = (key: PrefKey) => setPrefs((p) => ({ ...p, [key]: !p[key] }));
@@ -215,10 +270,10 @@ function NotificationsTab() {
   return (
     <div className="space-y-6">
       <div className="bg-card border border-card-border rounded-lg p-6">
-        <SectionHeader title="In-App Alerts" subtitle="Shown inside EstateFlow as you work" />
+        <SectionHeader title="In-App Alerts" subtitle="Shown inside RealtySell as you work" />
         <Toggle label="New lead assigned" description="Alert when a new lead is routed to you or your team" checked={prefs.newLead} onChange={() => toggle("newLead")} />
         <Toggle label="Deal stage change" description="When a deal moves to a new stage" checked={prefs.dealUpdate} onChange={() => toggle("dealUpdate")} />
-        <Toggle label="Agent activity" description="When your agents log calls, viewings, or notes" checked={prefs.agentActivity} onChange={() => toggle("agentActivity")} />
+        <Toggle label="Team activity" description="When your agents log calls, viewings, or notes" checked={prefs.agentActivity} onChange={() => toggle("agentActivity")} />
         <Toggle label="Portal sync" description="When leads are imported from 99acres, MagicBricks, etc." checked={prefs.portalSync} onChange={() => toggle("portalSync")} />
       </div>
       <div className="bg-card border border-card-border rounded-lg p-6">
@@ -232,7 +287,10 @@ function NotificationsTab() {
         <Toggle label="Browser push" description="Desktop notifications in your browser" checked={prefs.browserPush} onChange={() => toggle("browserPush")} />
       </div>
       <div className="flex justify-end">
-        <Button onClick={() => toast({ title: "Notification preferences saved ✓" })}>Save Preferences</Button>
+        <Button onClick={() => {
+          localStorage.setItem(NOTIF_KEY, JSON.stringify(prefs));
+          toast({ title: "Notification preferences saved ✓" });
+        }}>Save Preferences</Button>
       </div>
     </div>
   );
@@ -243,7 +301,7 @@ function PrivacyTab() {
   return (
     <div className="space-y-6">
       <div className="bg-card border border-card-border rounded-lg p-6">
-        <SectionHeader title="Data Retention" subtitle="How long EstateFlow retains your data" />
+        <SectionHeader title="Data Retention" subtitle="How long RealtySell retains your data" />
         <div className="space-y-3">
           {[
             { label: "Lead data", value: "5 years (per RERA guidelines)" },
